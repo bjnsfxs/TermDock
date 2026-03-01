@@ -34,7 +34,10 @@ export function parseEnvJson(raw: string): Record<string, string> {
 
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries(parsed)) {
-    normalized[key] = typeof value === "string" ? value : String(value);
+    if (typeof value !== "string") {
+      throw new Error(`Environment variable "${key}" must be a string.`);
+    }
+    normalized[key] = value;
   }
   return normalized;
 }

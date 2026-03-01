@@ -172,6 +172,12 @@
 - Verification rerun after M7 closeout:
   - `pnpm -C web test` passed (`12 passed, 0 failed`).
   - `pnpm -C web build` passed with chunk split outputs (`react-vendor`, `xterm`, `qrcode`) and no default chunk warning.
+- Fixed M7 follow-up review issue (env data integrity):
+  - `web/src/pages/instance-form-utils.ts`: `parseEnvJson` now enforces string-only env values and rejects non-string entries (object/array/number/boolean/null) instead of lossy `String(value)` coercion.
+  - `web/src/pages/instance-form-utils.test.ts`: added rejection coverage for nested/non-string env values and payload build blocking behavior.
+- Verification rerun after env validation fix:
+  - `pnpm -C web test` passed (`14 passed, 0 failed`).
+  - `pnpm -C web build` passed.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
