@@ -29,6 +29,7 @@ Settings and token management:
 - `PUT /api/v1/settings` updates daemon settings persisted on disk.
 - `POST /api/v1/auth/token/rotate` rotates bearer token immediately (old token becomes invalid).
 - Updating `bind_address` is only allowed when the request comes from a loopback client (`127.0.0.1` / `::1`).
+- `PUT /api/v1/settings` validates `bind_address` + `port` as a parseable socket address and returns `400` when invalid.
 - Changing `bind_address`/`port` requires daemon restart to take effect.
 
 ## WebSocket

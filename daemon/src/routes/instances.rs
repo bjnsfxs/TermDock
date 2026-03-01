@@ -200,6 +200,8 @@ pub async fn delete_instance(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
+    let _ = get_instance_by_id(&state.db, id).await?;
+
     // Best effort: stop if running.
     let _ = state.process.stop(id).await;
 
@@ -228,6 +230,7 @@ pub async fn stop_instance(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<InstanceRuntimeEnvelope>, AppError> {
+    let _ = get_instance_by_id(&state.db, id).await?;
     let rt = state.process.stop(id).await?;
     Ok(Json(InstanceRuntimeEnvelope { id, runtime: rt }))
 }
@@ -401,5 +404,41 @@ fn bool_to_i64(v: bool) -> i64 {
         1
     } else {
         0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{config::DaemonConfig, db};
+    use std::path::PathBuf;
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()))
+    }
+
+    async fn test_state() -> AppState {
+        let root = unique_temp_dir("aicli-instances-route-test");
+        let data_dir = root.join("data");
+        let web_dir = root.join("web");
+        std::fs::create_dir_all(&data_dir).expect("create data dir");
+        std::fs::create_dir_all(&web_dir).expect("create web dir");
+        std::fs::write(web_dir.join("index.html"), "<!doctype html><html></html>")
+            .expect("write index");
+
+        let cfg = DaemonConfig::for_tests(data_dir, web_dir, "test-token".to_string());
+        let db = db::init_sqlite(&cfg.data_dir).await.expect("init sqlite");
+        AppState::new(cfg, db)
+    }
+
+    #[tokio::test]
+    async fn stop_instance_returns_not_found_for_missing_id() {
+        let state = test_state().await;
+        let id = Uuid::new_v4();
+
+        let err = stop_instance(State(state), Path(id))
+            .await
+            .expect_err("missing instance should return not found");
+        assert!(matches!(err, AppError::NotFound(_)));
     }
 }

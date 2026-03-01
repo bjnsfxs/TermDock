@@ -17,6 +17,7 @@ use crate::state::AppState;
 
 const DEFAULT_TAIL_BYTES: usize = 8192;
 const MAX_TAIL_BYTES: usize = 1024 * 1024;
+const TERMINAL_OUTBOUND_QUEUE_CAPACITY: usize = 256;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -68,7 +69,7 @@ async fn term_loop(mut socket: WebSocket, state: AppState, id: Uuid) {
     };
 
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Message>();
+    let (out_tx, mut out_rx) = mpsc::channel::<Message>(TERMINAL_OUTBOUND_QUEUE_CAPACITY);
 
     let writer_task = tokio::spawn(async move {
         while let Some(frame) = out_rx.recv().await {
@@ -78,26 +79,30 @@ async fn term_loop(mut socket: WebSocket, state: AppState, id: Uuid) {
         }
     });
 
-    let _ = out_tx.send(Message::Text(
-        json!({
-            "type": "hello",
-            "daemon_version": env!("CARGO_PKG_VERSION"),
-        })
-        .to_string()
-        .into(),
-    ));
-    let _ = out_tx.send(Message::Text(
-        json!({
-            "type": "status",
-            "id": id,
-            "status": attach.runtime.status,
-            "pid": attach.runtime.pid,
-            "backend": attach.backend,
-            "clients_attached": attach.runtime.clients_attached,
-        })
-        .to_string()
-        .into(),
-    ));
+    let _ = out_tx
+        .send(Message::Text(
+            json!({
+                "type": "hello",
+                "daemon_version": env!("CARGO_PKG_VERSION"),
+            })
+            .to_string()
+            .into(),
+        ))
+        .await;
+    let _ = out_tx
+        .send(Message::Text(
+            json!({
+                "type": "status",
+                "id": id,
+                "status": attach.runtime.status,
+                "pid": attach.runtime.pid,
+                "backend": attach.backend,
+                "clients_attached": attach.runtime.clients_attached,
+            })
+            .to_string()
+            .into(),
+        ))
+        .await;
 
     let mut output_rx = attach.output_rx;
     let output_tx = out_tx.clone();
@@ -105,15 +110,17 @@ async fn term_loop(mut socket: WebSocket, state: AppState, id: Uuid) {
         loop {
             match output_rx.recv().await {
                 Ok(chunk) => {
-                    if output_tx.send(Message::Binary(chunk.into())).is_err() {
+                    if output_tx.send(Message::Binary(chunk.into())).await.is_err() {
                         break;
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                    let _ = output_tx.send(ws_warning(
-                        "output_lagged",
-                        format!("output lagged; dropped {skipped} frame(s)"),
-                    ));
+                    let _ = output_tx
+                        .send(ws_warning(
+                            "output_lagged",
+                            format!("output lagged; dropped {skipped} frame(s)"),
+                        ))
+                        .await;
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
             }
@@ -124,7 +131,7 @@ async fn term_loop(mut socket: WebSocket, state: AppState, id: Uuid) {
         match frame {
             Ok(Message::Binary(payload)) => {
                 if let Err(err) = state.process.write_input(id, payload.as_ref()).await {
-                    let _ = out_tx.send(ws_error("write_failed", err.to_string()));
+                    let _ = out_tx.send(ws_error("write_failed", err.to_string())).await;
                     break;
                 }
             }
@@ -137,7 +144,7 @@ async fn term_loop(mut socket: WebSocket, state: AppState, id: Uuid) {
                 }
             }
             Ok(Message::Ping(payload)) => {
-                let _ = out_tx.send(Message::Pong(payload));
+                let _ = out_tx.send(Message::Pong(payload)).await;
             }
             Ok(Message::Pong(_)) => {}
             Ok(Message::Close(_)) => break,
@@ -158,15 +165,17 @@ async fn handle_control_message(
     state: &AppState,
     id: Uuid,
     text: &str,
-    out_tx: &mpsc::UnboundedSender<Message>,
+    out_tx: &mpsc::Sender<Message>,
 ) -> Result<(), ()> {
     let msg = match serde_json::from_str::<ClientControlMessage>(text) {
         Ok(v) => v,
         Err(err) => {
-            let _ = out_tx.send(ws_error(
-                "invalid_message",
-                format!("invalid control message: {err}"),
-            ));
+            let _ = out_tx
+                .send(ws_error(
+                    "invalid_message",
+                    format!("invalid control message: {err}"),
+                ))
+                .await;
             return Ok(());
         }
     };
@@ -176,43 +185,49 @@ async fn handle_control_message(
             client_id,
             client_name,
         } => {
-            let _ = out_tx.send(Message::Text(
-                json!({
-                    "type": "hello",
-                    "daemon_version": env!("CARGO_PKG_VERSION"),
-                    "client_id": client_id,
-                    "client_name": client_name,
-                })
-                .to_string()
-                .into(),
-            ));
+            let _ = out_tx
+                .send(Message::Text(
+                    json!({
+                        "type": "hello",
+                        "daemon_version": env!("CARGO_PKG_VERSION"),
+                        "client_id": client_id,
+                        "client_name": client_name,
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .await;
             Ok(())
         }
         ClientControlMessage::Ping => {
-            let _ = out_tx.send(Message::Text(json!({"type":"pong"}).to_string().into()));
+            let _ = out_tx
+                .send(Message::Text(json!({"type":"pong"}).to_string().into()))
+                .await;
             Ok(())
         }
         ClientControlMessage::Tail { bytes } => {
             let requested = bytes.clamp(1, MAX_TAIL_BYTES);
             match state.process.tail_output(id, requested).await {
                 Ok(tail) => {
-                    let _ = out_tx.send(Message::Text(
-                        json!({
-                            "type": "tail_begin",
-                            "requested": requested,
-                            "bytes": tail.data.len(),
-                            "truncated": tail.truncated,
-                        })
-                        .to_string()
-                        .into(),
-                    ));
+                    let _ = out_tx
+                        .send(Message::Text(
+                            json!({
+                                "type": "tail_begin",
+                                "requested": requested,
+                                "bytes": tail.data.len(),
+                                "truncated": tail.truncated,
+                            })
+                            .to_string()
+                            .into(),
+                        ))
+                        .await;
                     if !tail.data.is_empty() {
-                        let _ = out_tx.send(Message::Binary(tail.data.into()));
+                        let _ = out_tx.send(Message::Binary(tail.data.into())).await;
                     }
                     Ok(())
                 }
                 Err(err) => {
-                    let _ = out_tx.send(ws_error("tail_failed", err.to_string()));
+                    let _ = out_tx.send(ws_error("tail_failed", err.to_string())).await;
                     Ok(())
                 }
             }
@@ -221,7 +236,9 @@ async fn handle_control_message(
             match state.process.resize_terminal(id, cols, rows).await {
                 Ok(_) => Ok(()),
                 Err(err) => {
-                    let _ = out_tx.send(ws_error("resize_failed", err.to_string()));
+                    let _ = out_tx
+                        .send(ws_error("resize_failed", err.to_string()))
+                        .await;
                     Ok(())
                 }
             }

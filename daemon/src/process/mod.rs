@@ -166,7 +166,9 @@ impl ProcessManager {
 
     /// Stop an instance using graceful -> forceful termination.
     pub async fn stop(&self, id: Uuid) -> Result<InstanceRuntime, AppError> {
-        let entry = self.get_or_create_entry(id).await;
+        let Some(entry) = self.get_entry(id).await else {
+            return Ok(InstanceRuntime::default());
+        };
         let _op = entry.op_lock.lock().await;
 
         let mut managed = {
@@ -1166,6 +1168,23 @@ mod tests {
             .await
             .expect("stop should succeed");
         assert!(matches!(stopped.status, InstanceStatus::Stopped));
+    }
+
+    #[tokio::test]
+    async fn stop_unknown_instance_does_not_create_entry() {
+        let manager = ProcessManager::new();
+        let unknown = Uuid::new_v4();
+        assert!(manager.entries.lock().await.is_empty());
+
+        let stopped = manager
+            .stop(unknown)
+            .await
+            .expect("stop should succeed for unknown instance");
+        assert!(matches!(stopped.status, InstanceStatus::Stopped));
+
+        let entries = manager.entries.lock().await;
+        assert!(entries.is_empty());
+        assert!(entries.get(&unknown).is_none());
     }
 
     #[tokio::test]

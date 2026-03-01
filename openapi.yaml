@@ -333,6 +333,7 @@ paths:
       description: |
         MVP recommendation:
           - Allow updating `bind_address` only when requested from loopback.
+          - Validate `bind_address` + `port` as a parseable socket address before saving.
           - Require daemon restart for bind/port changes.
       requestBody:
         required: true
@@ -802,6 +803,7 @@ components:
       properties:
         bind_address:
           type: string
+          description: IP literal bind address; must form a valid socket address with `port`.
           example: "0.0.0.0"
         port:
           type: integer

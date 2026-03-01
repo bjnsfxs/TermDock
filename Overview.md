@@ -136,6 +136,15 @@
   - initialized local Git repository in `C:\Users\12915\Desktop\RemoteAgent` with branch `main`,
   - created root commit `3a76c8c` (`chore: initial commit`),
   - configured `origin` as `https://github.com/bjnsfxs/TermDock.git` and pushed via `git push -u origin main`.
+- Fixed daemon review issues (stability + API consistency):
+  - `ProcessManager::stop` no longer creates runtime entries for unknown IDs (prevents ghost 1 MiB ring allocations),
+  - `/api/v1/instances/{id}/stop` now checks DB existence first and returns `404` for missing instances,
+  - `/api/v1/instances/{id}/output` now checks DB existence first and returns `404` for missing instances,
+  - `/ws/v1/term/{id}` outbound queue changed from unbounded channel to bounded `mpsc` with backpressure,
+  - `PUT /api/v1/settings` now validates `bind_address:port` parseability before persisting.
+- Verification rerun after fixes:
+  - `cargo fmt --manifest-path daemon/Cargo.toml` passed.
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (`12 passed, 0 failed`).
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
@@ -156,7 +165,7 @@
   - runtime updates are published as `instance_status` events.
 - Lifecycle behavior:
   - `start`: validates state, chooses backend by `use_pty`, spawns process, launches output readers.
-  - `stop`: closes stdin, graceful wait, force-kill fallback, clears runtime attachment count and metrics.
+  - `stop`: closes stdin, graceful wait, force-kill fallback, clears runtime attachment count and metrics; unknown IDs return default stopped runtime without creating new in-memory entries.
   - `restart`: stop then start.
   - `runtime`: refreshes child state via `try_wait` and publishes changes if state changed.
 - Terminal behavior:
@@ -173,16 +182,21 @@
 - Security/settings behavior:
   - `/api/v1/*` requires bearer token via REST header middleware.
   - `/ws/v1/*` requires bearer token via header or query-token fallback middleware.
-  - `/api/v1/settings` allows `bind_address` mutation only from loopback client addresses.
+  - `/api/v1/settings` allows `bind_address` mutation only from loopback client addresses and validates `bind_address:port` parseability before persisting.
 
 ## Testing Added
 - `daemon/src/process/mod.rs` tests include:
   - ring buffer tail/truncation semantics,
   - pipes start/stop with output capture,
+  - stop on unknown instance ID does not create process entry state,
   - attach/detach updates `clients_attached`,
   - lifecycle event publish (`start/stop`),
   - attach/detach event publish (`clients_attached`),
   - no duplicate event on stable runtime refresh.
+- route-level tests added:
+  - `daemon/src/routes/instances.rs`: `stop_instance` returns not found for missing IDs,
+  - `daemon/src/routes/output.rs`: output tail returns not found for missing IDs,
+  - `daemon/src/routes/settings.rs`: rejects invalid bind address and accepts valid bind+port updates.
 - `daemon/src/main.rs` route test:
   - verifies `/` and deep-link SPA route serve `index.html`,
   - verifies `/health` remains reachable,
