@@ -230,8 +230,11 @@ pub async fn stop_instance(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<InstanceRuntimeEnvelope>, AppError> {
-    let _ = get_instance_by_id(&state.db, id).await?;
+    let exists_in_db = instance_exists_by_id(&state.db, id).await?;
     let rt = state.process.stop(id).await?;
+    if !exists_in_db {
+        return Err(AppError::not_found("instance not found"));
+    }
     Ok(Json(InstanceRuntimeEnvelope { id, runtime: rt }))
 }
 
@@ -266,6 +269,14 @@ async fn get_instance_by_id(pool: &SqlitePool, id: Uuid) -> Result<Instance, App
     inst.restart_policy = restart;
 
     Ok(inst)
+}
+
+async fn instance_exists_by_id(pool: &SqlitePool, id: Uuid) -> Result<bool, AppError> {
+    let row: Option<String> = sqlx::query_scalar(r#"SELECT id FROM instances WHERE id=? "#)
+        .bind(id.to_string())
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.is_some())
 }
 
 fn validate_create(req: &InstanceCreateRequest) -> Result<(), AppError> {
@@ -410,8 +421,12 @@ fn bool_to_i64(v: bool) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{config::DaemonConfig, db};
-    use std::path::PathBuf;
+    use crate::{
+        config::DaemonConfig,
+        db,
+        models::{now_rfc3339, ConfigMode, Instance, InstanceStatus, RestartPolicy},
+    };
+    use std::{collections::BTreeMap, path::PathBuf};
 
     fn unique_temp_dir(prefix: &str) -> PathBuf {
         std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()))
@@ -440,5 +455,69 @@ mod tests {
             .await
             .expect_err("missing instance should return not found");
         assert!(matches!(err, AppError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn stop_instance_stops_orphan_runtime_even_when_row_missing() {
+        let state = test_state().await;
+        let id = Uuid::new_v4();
+        let instance = test_instance(id);
+
+        let running = state
+            .process
+            .start(&instance)
+            .await
+            .expect("start should succeed");
+        assert!(matches!(running.status, InstanceStatus::Running));
+
+        let err = stop_instance(State(state.clone()), Path(id))
+            .await
+            .expect_err("missing instance should return not found");
+        assert!(matches!(err, AppError::NotFound(_)));
+
+        let runtime = state
+            .process
+            .runtime(id)
+            .await
+            .expect("runtime entry should exist");
+        assert!(matches!(runtime.status, InstanceStatus::Stopped));
+        assert!(runtime.pid.is_none());
+    }
+
+    fn test_instance(id: Uuid) -> Instance {
+        let (command, args) = if cfg!(windows) {
+            (
+                "cmd".to_string(),
+                vec![
+                    "/C".to_string(),
+                    "echo hello && ping -n 6 127.0.0.1 > nul".to_string(),
+                ],
+            )
+        } else {
+            (
+                "sh".to_string(),
+                vec!["-c".to_string(), "printf hello; sleep 5".to_string()],
+            )
+        };
+
+        Instance {
+            id,
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            name: "orphan-test".to_string(),
+            enabled: true,
+            command,
+            args,
+            cwd: None,
+            env: BTreeMap::new(),
+            use_pty: false,
+            config_mode: ConfigMode::None,
+            config_path: None,
+            config_filename: None,
+            config_content: None,
+            restart_policy: RestartPolicy::Never,
+            auto_start: false,
+            runtime: None,
+        }
     }
 }

@@ -138,13 +138,18 @@
   - configured `origin` as `https://github.com/bjnsfxs/TermDock.git` and pushed via `git push -u origin main`.
 - Fixed daemon review issues (stability + API consistency):
   - `ProcessManager::stop` no longer creates runtime entries for unknown IDs (prevents ghost 1 MiB ring allocations),
-  - `/api/v1/instances/{id}/stop` now checks DB existence first and returns `404` for missing instances,
+  - `/api/v1/instances/{id}/stop` now returns `404` for missing instances while preserving orphan runtime stop capability,
   - `/api/v1/instances/{id}/output` now checks DB existence first and returns `404` for missing instances,
   - `/ws/v1/term/{id}` outbound queue changed from unbounded channel to bounded `mpsc` with backpressure,
   - `PUT /api/v1/settings` now validates `bind_address:port` parseability before persisting.
 - Verification rerun after fixes:
   - `cargo fmt --manifest-path daemon/Cargo.toml` passed.
   - `cargo test --manifest-path daemon/Cargo.toml` passed (`12 passed, 0 failed`).
+- Fixed stop-path regression from review:
+  - `POST /api/v1/instances/{id}/stop` now attempts process stop before returning `404` for missing DB rows,
+  - orphan runtimes (process state exists, DB row missing) can be terminated via stop endpoint again.
+- Verification rerun:
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (`13 passed, 0 failed`) with existing dead-code warning in `daemon/src/config.rs` for unused helper methods.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
@@ -195,6 +200,7 @@
   - no duplicate event on stable runtime refresh.
 - route-level tests added:
   - `daemon/src/routes/instances.rs`: `stop_instance` returns not found for missing IDs,
+  - `daemon/src/routes/instances.rs`: `stop_instance` still stops orphan runtimes even when returning not found,
   - `daemon/src/routes/output.rs`: output tail returns not found for missing IDs,
   - `daemon/src/routes/settings.rs`: rejects invalid bind address and accepts valid bind+port updates.
 - `daemon/src/main.rs` route test:
