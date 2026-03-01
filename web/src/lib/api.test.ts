@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildWsUrl } from "./api";
+import { buildWsUrl, resolveDefaultBaseUrl } from "./api";
 
 afterEach(() => {
   localStorage.clear();
@@ -22,5 +22,25 @@ describe("buildWsUrl", () => {
     localStorage.setItem("daemonBaseUrl", "http://127.0.0.1:8765");
     localStorage.setItem("daemonToken", "");
     expect(buildWsUrl("/ws/v1/events")).toBe("ws://127.0.0.1:8765/ws/v1/events");
+  });
+});
+
+describe("resolveDefaultBaseUrl", () => {
+  it("uses current origin for http/https protocols", () => {
+    expect(
+      resolveDefaultBaseUrl({
+        protocol: "https:",
+        origin: "https://daemon.example.com",
+      })
+    ).toBe("https://daemon.example.com");
+  });
+
+  it("falls back to loopback for non-http protocols", () => {
+    expect(
+      resolveDefaultBaseUrl({
+        protocol: "tauri:",
+        origin: "tauri://localhost",
+      })
+    ).toBe("http://127.0.0.1:8765");
   });
 });

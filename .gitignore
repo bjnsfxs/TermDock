@@ -13,3 +13,6 @@ dist/
 *.sqlite3
 data/
 artifacts/
+
+# Tauri generated schemas
+client/src-tauri/gen/

@@ -1,15 +1,24 @@
-# Desktop client (Tauri v2) placeholder
+# Desktop client (Tauri v2 wrapper)
 
-This directory is intentionally a placeholder in the skeleton.
+This package is a desktop wrapper around the shared React UI in `../web`.
 
-Recommended approach for Codex:
-1. Create a Tauri v2 app here (React + Vite).
-2. Reuse the UI from `../web/` (either by copying or by extracting a shared package under `packages/ui/`).
-3. Add a settings page to set daemon address/token and a QR code generator.
+## Design
 
-Suggested commands (run manually / via Codex):
-- `pnpm create tauri-app@latest client -- --template react-ts`
-- Then move/merge files as needed.
+- Single UI source: all routes and pages live in `web/`.
+- Tauri dev mode loads `http://127.0.0.1:5173` (started automatically).
+- Tauri build mode compiles `web/dist` and embeds those static assets.
+- Daemon lifecycle is out of scope here: desktop client connects to an already-running daemon.
 
-Why placeholder?
-- Tauri v2 templates change over time; generating from the official CLI avoids stale config.
+## Commands
+
+- `pnpm -C client dev`
+  - Runs `tauri dev`.
+  - Starts web Vite dev server via Tauri `beforeDevCommand`.
+- `pnpm -C client build`
+  - Runs `tauri build --no-bundle`.
+  - Produces a local desktop build without installer packaging.
+
+## Runtime notes
+
+- When running under browser `http/https`, routing uses `BrowserRouter`.
+- When running under Tauri custom protocol, routing falls back to `HashRouter` to keep deep links stable.

@@ -12,6 +12,8 @@ export type ApiConfig = {
   token: string; // bearer token
 };
 
+const FALLBACK_DAEMON_BASE_URL = "http://127.0.0.1:8765";
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -24,13 +26,20 @@ export class ApiError extends Error {
   }
 }
 
+export function resolveDefaultBaseUrl(locationLike?: {
+  origin?: string;
+  protocol?: string;
+}): string {
+  const protocol = locationLike?.protocol?.toLowerCase();
+  if ((protocol === "http:" || protocol === "https:") && locationLike?.origin) {
+    return locationLike.origin;
+  }
+  return FALLBACK_DAEMON_BASE_URL;
+}
+
 export function loadApiConfig(): ApiConfig {
   const fromStorage = localStorage.getItem("daemonBaseUrl");
-  const baseUrl =
-    fromStorage ||
-    (typeof window !== "undefined" && window.location?.origin
-      ? window.location.origin
-      : "http://127.0.0.1:8765");
+  const baseUrl = fromStorage || resolveDefaultBaseUrl(typeof window !== "undefined" ? window.location : undefined);
   const token = localStorage.getItem("daemonToken") || "";
   return { baseUrl, token };
 }

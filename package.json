@@ -9,7 +9,9 @@
   ],
   "scripts": {
     "dev:web": "pnpm -C web dev",
+    "dev:desktop": "pnpm -C client dev",
     "build:web": "pnpm -C web build",
+    "build:desktop": "pnpm -C client build",
     "release:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/build-portable.ps1",
     "dev:daemon": "cargo run --manifest-path daemon/Cargo.toml",
     "lint": "echo \"Add lint scripts\""

@@ -2,8 +2,13 @@
   "name": "@ai-cli-manager/client",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "echo \"Run create-tauri-app in this folder\"",
-    "build": "echo \"Run tauri build\""
+    "dev": "tauri dev",
+    "build": "tauri build --no-bundle",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
   }
 }

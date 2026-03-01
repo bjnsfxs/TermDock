@@ -62,3 +62,16 @@ Security notes:
 - Autostart does not run:
   - Open Task Scheduler and inspect `AI CLI Manager Daemon` history.
   - Reinstall task with `.\remove-autostart.ps1` then `.\install-autostart.ps1`.
+
+## 6. Desktop wrapper (M8, connect-only)
+
+The Tauri desktop app is now available under `client/` and reuses the same web UI.
+
+- Dev run: `pnpm dev:desktop`
+- Local build: `pnpm build:desktop`
+
+Important:
+
+- Desktop wrapper does **not** manage daemon lifecycle in M8.
+- Start daemon separately (for example with `scripts\start-daemon.ps1`) before using desktop app.
+- In desktop protocol context, default daemon base URL falls back to `http://127.0.0.1:8765`.

@@ -1,0 +1,21 @@
+[package]
+name = "ai-cli-manager-client"
+version = "0.1.0"
+description = "Desktop wrapper for AI CLI Manager"
+authors = ["AI CLI Manager"]
+edition = "2021"
+
+[lib]
+name = "ai_cli_manager_client_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+
+[features]
+default = []
+custom-protocol = ["tauri/custom-protocol"]

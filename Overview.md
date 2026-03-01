@@ -1,7 +1,7 @@
 # Overview
 
 ## Project Snapshot
-- Monorepo with `daemon/` (Rust API + runtime manager), `web/` (React PWA UI), `client/` (Tauri placeholder), `packages/api-client/` (OpenAPI TS client placeholder).
+- Monorepo with `daemon/` (Rust API + runtime manager), `web/` (React PWA UI), `client/` (Tauri desktop wrapper), `packages/api-client/` (OpenAPI TS client placeholder).
 - Core docs: `Plan.md`, `openapi.yaml`, `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`.
 
 ## Milestone Status
@@ -89,6 +89,19 @@
   - Hardened settings interactions with deterministic loading states, stable notice timing, and strict port validation.
   - Added route-level lazy loading plus Vite manual chunk splitting (`react-vendor`, `xterm`, `qrcode`), eliminating prior >500 kB warning in default output threshold.
   - Added lightweight web test suite (Vitest) covering URL building, dashboard runtime patch logic, instance payload validation, and settings port validation.
+- M8: completed in this session (`client + web + docs`):
+  - Replaced `client/` placeholder with a real Tauri v2 desktop wrapper (`src-tauri`) that reuses `web/` as the single UI source.
+  - Wired Tauri build/dev lifecycle to shared web commands:
+    - dev URL: `http://127.0.0.1:5173`,
+    - build input: `web/dist`,
+    - desktop local build script uses `tauri build --no-bundle`.
+  - Added root workspace entry scripts:
+    - `pnpm dev:desktop`,
+    - `pnpm build:desktop`.
+  - Updated frontend runtime behavior for desktop protocol compatibility:
+    - protocol-aware router selection (`BrowserRouter` for `http/https`, `HashRouter` otherwise),
+    - default API base URL fallback to `http://127.0.0.1:8765` in non-HTTP protocol contexts.
+  - Expanded docs for desktop connect-only behavior (`README.md`, `client/README.md`, `docs/DEPLOY_WINDOWS.md`).
 
 ## Environment & Build Status (2026-03-01)
 - Dependency isolation baseline remains workspace-local (`pnpm` lockfile in repo root; no global installs).
@@ -103,6 +116,11 @@
 - Verification completed after M7 quality closeout:
   - `pnpm -C web test` passed (`4` files, `12` tests).
   - `pnpm -C web build` passed with split output chunks (no chunk-size warning emitted).
+- Verification completed after M8 desktop wrapper bootstrap:
+  - `pnpm -C web test` passed (`4` files, `16` tests).
+  - `pnpm -C web build` passed.
+  - `pnpm -C client build` passed (`tauri build --no-bundle`) and produced:
+    - `client/src-tauri/target/release/ai-cli-manager-client.exe`
 
 ## Session Log (2026-03-01)
 - Implemented M4 backend event + metrics pipeline.
@@ -178,6 +196,23 @@
 - Verification rerun after env validation fix:
   - `pnpm -C web test` passed (`14 passed, 0 failed`).
   - `pnpm -C web build` passed.
+- Implemented M8 desktop wrapper (Windows-first, connect-only):
+  - replaced `client/package.json` placeholder scripts with real Tauri scripts and local CLI dependency,
+  - added `client/src-tauri` Rust app, capability config, and Tauri v2 app config,
+  - wired Tauri to reuse `web/` dev/build outputs instead of duplicating frontend code.
+- Updated shared web runtime for desktop protocol:
+  - `web/src/main.tsx` now switches to `HashRouter` for non-HTTP protocol runtimes (desktop wrapper),
+  - `web/src/lib/api.ts` now has explicit `resolveDefaultBaseUrl` behavior for `http/https` vs non-HTTP schemes,
+  - `web/src/lib/api.test.ts` expanded with default base URL behavior coverage.
+- Updated docs for desktop workflow:
+  - `README.md` now documents desktop dev/build entry points,
+  - `client/README.md` now documents wrapper architecture and commands,
+  - `docs/DEPLOY_WINDOWS.md` now includes M8 desktop connect-only notes.
+- Verification rerun after M8 implementation:
+  - `pnpm install` passed and synced workspace lockfile with `@tauri-apps/cli`.
+  - `pnpm -C web test` passed (`16 passed, 0 failed`).
+  - `pnpm -C web build` passed.
+  - `pnpm -C client build` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
@@ -237,7 +272,6 @@
   - verifies `/api/v1/instances` still returns `401` without token.
 
 ## Known Gaps / TODO
-- `client/` (Tauri desktop wrapper) still placeholder.
 - `packages/api-client` schema generation + typed fetch wrapper still not implemented.
 - Portable release is zip-only (no MSI/NSIS installer yet).
 - Release automation is local-script only (no CI artifacts/release pipeline yet).
@@ -245,9 +279,10 @@
 - No dedicated integration test for `/ws/v1/events` network path yet (unit tests cover process event emission).
 - No dedicated integration test yet for loopback-only settings update behavior.
 - Pairing approval flow endpoint (`/api/v1/auth/pair`) is still not implemented (current pairing is token + address QR).
+- Desktop wrapper is connect-only in M8 (does not manage daemon lifecycle or background service).
 
 ## Next Recommended Step
-- M8 implementation options:
-  - bootstrap `client/` desktop wrapper (Tauri v2) and align with existing web routes + settings persistence contract,
-  - add CI pipeline for daemon/web build + portable artifact publication,
-  - add installer track (MSI/NSIS) after desktop wrapper baseline is stable.
+- M9: add CI pipeline for daemon/web/client verification and artifact publication:
+  - run `cargo test` (daemon), `pnpm -C web test/build`, and `pnpm -C client build` on Windows runners,
+  - archive portable daemon/web artifact and desktop local build outputs,
+  - enforce PR checks before merge.
