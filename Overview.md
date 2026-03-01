@@ -132,6 +132,10 @@
   - rebuilt `web/src/pages/Terminal.tsx` to match unified style without changing terminal protocol.
 - Verification rerun after redesign:
   - `pnpm -C web build` passed (Vite warning only: main JS chunk > 500 kB due existing bundle composition).
+- Repository bootstrap:
+  - initialized local Git repository in `C:\Users\12915\Desktop\RemoteAgent` with branch `main`,
+  - created root commit `3a76c8c` (`chore: initial commit`),
+  - configured `origin` as `https://github.com/bjnsfxs/TermDock.git` and pushed via `git push -u origin main`.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
