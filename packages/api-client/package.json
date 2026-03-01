@@ -1,0 +1,12 @@
+{
+  "name": "@ai-cli-manager/api-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "generate": "openapi-typescript ../../openapi.yaml -o src/schema.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.5.0"
+  }
+}

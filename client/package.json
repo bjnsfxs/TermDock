@@ -1,0 +1,9 @@
+{
+  "name": "@ai-cli-manager/client",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "echo \"Run create-tauri-app in this folder\"",
+    "build": "echo \"Run tauri build\""
+  }
+}

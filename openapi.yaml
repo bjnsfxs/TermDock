@@ -1,0 +1,835 @@
+openapi: 3.0.3
+info:
+  title: AI CLI Manager Daemon API
+  version: 0.1.0
+  description: |
+    REST API for managing multiple AI CLI instances on a Windows host daemon.
+
+    Notes:
+      - This spec covers REST endpoints under `/api/v1`.
+      - WebSocket endpoints are documented under `/ws/v1/*` using a conventional `101 Switching Protocols`
+        response. OpenAPI does not formally model WebSocket message flows; see `docs/API.md` for the
+        detailed WS message protocol.
+
+servers:
+  - url: http://127.0.0.1:8765
+    description: Local daemon (default)
+
+tags:
+  - name: Health
+  - name: Instances
+  - name: Config
+  - name: Control
+  - name: Output
+  - name: Settings
+  - name: Auth
+  - name: WebSocket
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Public endpoint (no auth).
+      security: []
+      responses:
+        "200":
+          description: Daemon is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/instances:
+    get:
+      tags: [Instances]
+      summary: List instances
+      parameters:
+        - name: include_runtime
+          in: query
+          description: Include runtime fields (status/pid/metrics) if available.
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: List of instances
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Instances]
+      summary: Create a new instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstanceCreateRequest"
+      responses:
+        "201":
+          description: Instance created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/instances/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/InstanceId"
+    get:
+      tags: [Instances]
+      summary: Get an instance by id
+      parameters:
+        - name: include_runtime
+          in: query
+          description: Include runtime fields (status/pid/metrics) if available.
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: Instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Instances]
+      summary: Update an instance (partial update semantics)
+      description: |
+        Uses merge/patch semantics even though it is a PUT:
+          - Any field present in the request body updates that field.
+          - Any field omitted is left unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstanceUpdateRequest"
+      responses:
+        "200":
+          description: Updated instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Instances]
+      summary: Delete an instance
+      description: |
+        If the instance is running, the daemon should stop it first (best-effort), then delete.
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/instances/{id}/config:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/InstanceId"
+    get:
+      tags: [Config]
+      summary: Get instance config view
+      parameters:
+        - name: include_content
+          in: query
+          description: Include config content (may be large). For mode=path, daemon may read from file.
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "200":
+          description: Instance config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceConfigResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Config]
+      summary: Update instance config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstanceConfigUpdateRequest"
+      responses:
+        "200":
+          description: Updated config view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceConfigResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/instances/{id}/start:
+    post:
+      tags: [Control]
+      summary: Start an instance
+      description: Starts an instance using its configured backend (`pipes` or `pty`).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/InstanceId"
+      responses:
+        "200":
+          description: Started (or already running)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceRuntimeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/instances/{id}/stop:
+    post:
+      tags: [Control]
+      summary: Stop an instance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/InstanceId"
+      responses:
+        "200":
+          description: Stopped (or already stopped)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceRuntimeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/instances/{id}/restart:
+    post:
+      tags: [Control]
+      summary: Restart an instance
+      description: Restarts an instance using its configured backend (`pipes` or `pty`).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/InstanceId"
+      responses:
+        "200":
+          description: Restarted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceRuntimeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/instances/{id}/output:
+    get:
+      tags: [Output]
+      summary: Get recent output tail for an instance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/InstanceId"
+        - name: bytes
+          in: query
+          required: false
+          description: Number of bytes requested from the tail ring buffer.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1048576
+            default: 8192
+        - name: encoding
+          in: query
+          required: false
+          description: Response encoding for returned output bytes.
+          schema:
+            type: string
+            enum: [base64]
+            default: base64
+      responses:
+        "200":
+          description: Output tail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceOutputTailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/settings:
+    get:
+      tags: [Settings]
+      summary: Get daemon settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [Settings]
+      summary: Update daemon settings
+      description: |
+        MVP recommendation:
+          - Allow updating `bind_address` only when requested from loopback.
+          - Require daemon restart for bind/port changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdateRequest"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/token/rotate:
+    post:
+      tags: [Auth]
+      summary: Rotate bearer token
+      description: Returns a new token and invalidates the old one.
+      responses:
+        "200":
+          description: Rotated token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenRotateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /ws/v1/events:
+    get:
+      tags: [WebSocket]
+      summary: Global events WebSocket
+      description: |
+        Upgrade this request to a WebSocket to receive global events
+        (instance status changes, metrics updates, daemon notifications).
+
+        Auth:
+          - Preferred (non-browser / native clients): `Authorization: Bearer <token>`
+          - Browser clients: use query param `?token=<token>` because WebSocket API cannot set custom headers.
+
+        See `docs/API.md` for message formats.
+      parameters:
+        - name: token
+          in: query
+          required: false
+          description: Bearer token for browser WebSocket clients (fallback).
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket)
+
+  /ws/v1/term/{id}:
+    get:
+      tags: [WebSocket]
+      summary: Terminal I/O WebSocket for an instance
+      description: |
+        Upgrade this request to a WebSocket to attach to an instance terminal stream.
+
+        - Server -> Client:
+          - binary frames: terminal output bytes (including tail payload bytes)
+          - text frames (JSON): hello/status/warning/error/tail_begin
+        - Client -> Server:
+          - binary frames: stdin input bytes
+          - text frames (JSON): hello/ping/resize/tail requests
+
+        Auth:
+          - Preferred (non-browser / native clients): `Authorization: Bearer <token>`
+          - Browser clients: use query param `?token=<token>` because WebSocket API cannot set custom headers.
+
+        See `docs/API.md` for message formats.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/InstanceId"
+        - name: token
+          in: query
+          required: false
+          description: Bearer token for browser WebSocket clients (fallback).
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    InstanceId:
+      type: string
+      format: uuid
+      example: "8d8a4d3c-3d50-4d87-9a7f-4df9dbf9c9f8"
+
+    Timestamp:
+      type: string
+      format: date-time
+      example: "2026-03-01T12:34:56Z"
+
+    HealthResponse:
+      type: object
+      required: [status, version, uptime_seconds]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: "0.1.0"
+        uptime_seconds:
+          type: integer
+          example: 123
+
+    RestartPolicy:
+      type: string
+      enum: [never, on-failure, always]
+
+    ConfigMode:
+      type: string
+      enum: [none, path, inline]
+
+    InstanceStatus:
+      type: string
+      enum: [stopped, starting, running, stopping, exited, error]
+
+    InstanceBase:
+      type: object
+      required: [name, enabled, command, args, env, use_pty, config_mode, restart_policy, auto_start]
+      properties:
+        name:
+          type: string
+          example: "Aider (repo-1)"
+        enabled:
+          type: boolean
+          default: true
+        command:
+          type: string
+          example: "aider"
+        args:
+          type: array
+          items:
+            type: string
+          example: ["--model", "gpt-4.1", "--verbose"]
+        cwd:
+          type: string
+          nullable: true
+          example: "C:\\work\\repo-1"
+        env:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            OPENAI_API_KEY: "********"
+        use_pty:
+          type: boolean
+          default: true
+        config_mode:
+          $ref: "#/components/schemas/ConfigMode"
+        config_path:
+          type: string
+          nullable: true
+          description: Only meaningful when config_mode=path
+          example: "C:\\work\\repo-1\\.aider.conf.yml"
+        config_filename:
+          type: string
+          nullable: true
+          description: Only meaningful when config_mode=inline
+          example: "config.yaml"
+        config_content:
+          type: string
+          nullable: true
+          description: Only meaningful when config_mode=inline
+          example: "model: gpt-4.1\n"
+        restart_policy:
+          $ref: "#/components/schemas/RestartPolicy"
+        auto_start:
+          type: boolean
+          default: false
+
+    InstanceCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/InstanceBase"
+
+    InstanceUpdateRequest:
+      type: object
+      description: Partial update fields (merge semantics).
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        cwd:
+          type: string
+          nullable: true
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        use_pty:
+          type: boolean
+        config_mode:
+          $ref: "#/components/schemas/ConfigMode"
+        config_path:
+          type: string
+          nullable: true
+        config_filename:
+          type: string
+          nullable: true
+        config_content:
+          type: string
+          nullable: true
+        restart_policy:
+          $ref: "#/components/schemas/RestartPolicy"
+        auto_start:
+          type: boolean
+
+    InstanceRuntime:
+      type: object
+      required: [status, clients_attached]
+      properties:
+        status:
+          $ref: "#/components/schemas/InstanceStatus"
+        pid:
+          type: integer
+          nullable: true
+          example: 12345
+        started_at:
+          $ref: "#/components/schemas/Timestamp"
+          nullable: true
+        exit_code:
+          type: integer
+          nullable: true
+          example: 0
+        cpu_percent:
+          type: number
+          format: float
+          nullable: true
+          example: 2.5
+        mem_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          example: 104857600
+        clients_attached:
+          type: integer
+          example: 1
+
+    Instance:
+      type: object
+      required:
+        - id
+        - created_at
+        - updated_at
+        - name
+        - enabled
+        - command
+        - args
+        - env
+        - use_pty
+        - config_mode
+        - restart_policy
+        - auto_start
+      properties:
+        id:
+          $ref: "#/components/schemas/InstanceId"
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+        name:
+          type: string
+        enabled:
+          type: boolean
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        cwd:
+          type: string
+          nullable: true
+        env:
+          type: object
+          additionalProperties:
+            type: string
+        use_pty:
+          type: boolean
+        config_mode:
+          $ref: "#/components/schemas/ConfigMode"
+        config_path:
+          type: string
+          nullable: true
+        config_filename:
+          type: string
+          nullable: true
+        config_content:
+          type: string
+          nullable: true
+        restart_policy:
+          $ref: "#/components/schemas/RestartPolicy"
+        auto_start:
+          type: boolean
+        runtime:
+          $ref: "#/components/schemas/InstanceRuntime"
+          nullable: true
+
+    InstanceResponse:
+      type: object
+      required: [instance]
+      properties:
+        instance:
+          $ref: "#/components/schemas/Instance"
+
+    InstanceListResponse:
+      type: object
+      required: [instances]
+      properties:
+        instances:
+          type: array
+          items:
+            $ref: "#/components/schemas/Instance"
+
+    InstanceRuntimeResponse:
+      type: object
+      required: [id, runtime]
+      properties:
+        id:
+          $ref: "#/components/schemas/InstanceId"
+        runtime:
+          $ref: "#/components/schemas/InstanceRuntime"
+
+    InstanceConfig:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          $ref: "#/components/schemas/ConfigMode"
+        path:
+          type: string
+          nullable: true
+          description: Present when mode=path
+        filename:
+          type: string
+          nullable: true
+          description: Present when mode=inline
+        content:
+          type: string
+          nullable: true
+          description: Present when include_content=true
+
+    InstanceConfigResponse:
+      type: object
+      required: [id, config]
+      properties:
+        id:
+          $ref: "#/components/schemas/InstanceId"
+        config:
+          $ref: "#/components/schemas/InstanceConfig"
+
+    InstanceConfigUpdateRequest:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          $ref: "#/components/schemas/ConfigMode"
+        path:
+          type: string
+          nullable: true
+        filename:
+          type: string
+          nullable: true
+        content:
+          type: string
+          nullable: true
+
+    InstanceOutputTailResponse:
+      type: object
+      required: [id, bytes, encoding, data, truncated]
+      properties:
+        id:
+          $ref: "#/components/schemas/InstanceId"
+        bytes:
+          type: integer
+          example: 8192
+        encoding:
+          type: string
+          enum: [base64]
+          example: base64
+        data:
+          type: string
+          description: Base64 encoded output bytes.
+        truncated:
+          type: boolean
+          description: True if less data than requested was available.
+
+    SettingsResponse:
+      type: object
+      required: [bind_address, port, data_dir, token]
+      properties:
+        bind_address:
+          type: string
+          example: "127.0.0.1"
+        port:
+          type: integer
+          example: 8765
+        data_dir:
+          type: string
+          example: "C:\\Users\\you\\AppData\\Roaming\\ai-cli-manager"
+        token:
+          type: string
+          example: "replace-with-real-token"
+
+    SettingsUpdateRequest:
+      type: object
+      properties:
+        bind_address:
+          type: string
+          example: "0.0.0.0"
+        port:
+          type: integer
+          example: 8765
+
+    TokenRotateResponse:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          example: "new-token-value"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: "bad_request"
+            message:
+              type: string
+              example: "Invalid args field; expected JSON array."
+            details:
+              type: object
+              additionalProperties: true
+              nullable: true

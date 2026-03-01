@@ -1,0 +1,15 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Logs / data
+*.log
+*.sqlite
+*.sqlite3
+data/
+artifacts/

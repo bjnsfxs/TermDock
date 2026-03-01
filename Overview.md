@@ -1,0 +1,201 @@
+# Overview
+
+## Project Snapshot
+- Monorepo with `daemon/` (Rust API + runtime manager), `web/` (React PWA UI), `client/` (Tauri placeholder), `packages/api-client/` (OpenAPI TS client placeholder).
+- Core docs: `Plan.md`, `openapi.yaml`, `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY.md`.
+
+## Milestone Status
+- M0: completed (scaffold + `/health`).
+- M1: completed (SQLite migration + instance CRUD).
+- M2: completed (pipes backend process lifecycle + output tail API).
+- M3: completed (`daemon + web`):
+  - Implemented real `PtyBackend` with `portable-pty` and kept `PipesBackend` path.
+  - Refactored `ProcessManager` to support:
+    - backend-aware runtime (`pipes`/`pty`),
+    - per-instance output broadcast + existing ring buffer tail,
+    - terminal attach/detach client counting,
+    - terminal stdin write API,
+    - terminal resize API (PTY resize, pipes no-op).
+  - Implemented `/ws/v1/term/{id}` protocol end-to-end:
+    - server push: binary output + `hello/status/tail_begin/warning/error` text frames,
+    - client input: binary stdin + `hello/ping/tail/resize` control frames,
+    - lag warning on dropped broadcast frames,
+    - attach/detach lifecycle wired to runtime `clients_attached`.
+  - Web terminal page now uses real WS stream with:
+    - streaming UTF-8 decode for binary frames,
+    - initial `hello + tail` handshake,
+    - resize throttling + WS resize control,
+    - reconnect action and live session/backend/clients info.
+  - Removed M2 PTY fallback UX:
+    - dashboard no longer special-cases `PTY_BACKEND_NOT_READY`,
+    - instance form default restored to `use_pty=true` and M2 warning removed.
+  - Updated OpenAPI + API docs to remove M2 PTY 501 limitation and document current terminal WS message flow.
+- M4: completed in this session (`daemon + web`):
+  - Added process event bus in `ProcessManager` (`ProcessEvent::instance_status`) with runtime de-dup publish.
+  - Wired lifecycle event publish for:
+    - start/stop/restart transitions,
+    - runtime refresh on child exit/error,
+    - terminal attach/detach `clients_attached` changes.
+  - Added periodic metrics sampler (`sysinfo`) with 1s interval in `main.rs` background task.
+  - Implemented real `/ws/v1/events`:
+    - sends `hello`,
+    - streams process events,
+    - handles `ping` -> `pong`,
+    - emits `notice` on lagged event receiver.
+  - Updated dashboard to events-first:
+    - subscribes to `/ws/v1/events`,
+    - patches React Query cache on `instance_status`,
+    - uses exponential reconnect backoff,
+    - falls back to 2s polling only when WS disconnected.
+  - Added shared `buildWsUrl` helper and switched terminal WS URL construction to it.
+  - Updated `docs/API.md` to document current events behavior.
+- M5: completed in this session (`daemon + web + docs`):
+  - Hardened settings update authorization:
+    - added `403 forbidden` error surface in daemon error model,
+    - enforced loopback-only `bind_address` update in `PUT /api/v1/settings`,
+    - kept bind/port persistence behavior with restart-required semantics.
+  - Updated daemon serving mode to include connection info (`into_make_service_with_connect_info`) so settings route can evaluate client source address.
+  - Completed settings/pairing UX on web client:
+    - added daemon settings update API client (`PUT /api/v1/settings`),
+    - settings page now supports bind/port edit + apply, token copy, pairing URI copy,
+    - added local QR generation (payload includes base URL + token) with LAN loopback warning for mobile use.
+  - Expanded security and API docs:
+    - `docs/SECURITY.md` now documents MVP baseline, LAN risk guidance, current limitations, and TLS roadmap,
+    - `docs/API.md` and `openapi.yaml` updated for settings/token behavior and forbidden response.
+- M6: completed in this session (`daemon + web + scripts + docs`, daemon+PWA scope):
+  - Added daemon static UI hosting:
+    - serves bundled web app from `AICLI_WEB_DIR`,
+    - defaults to `<daemon_exe_dir>/web` when env var is not set,
+    - keeps `/health`, `/api/v1/*`, `/ws/v1/*` behavior unchanged,
+    - enables SPA history fallback (`index.html`) for frontend routes.
+  - Updated web API default base URL behavior:
+    - uses saved local config when present,
+    - otherwise defaults to `window.location.origin` (same-origin daemon-hosted UI),
+    - keeps `http://127.0.0.1:8765` fallback for non-browser/default environments.
+  - Added Windows delivery tooling:
+    - `scripts/release/build-portable.ps1` builds web + daemon release and assembles `artifacts/ai-cli-manager-win-x64.zip`,
+    - `scripts/windows/start-daemon.ps1` launches daemon with packaged web dir wiring,
+    - `scripts/windows/install-autostart.ps1` / `remove-autostart.ps1` manage user-level Scheduled Task auto-start,
+    - `scripts/windows/show-token.ps1` reads persisted daemon token from data dir.
+  - Expanded delivery docs:
+    - `README.md` now documents daemon-hosted UI and portable build flow,
+    - added `docs/DEPLOY_WINDOWS.md`,
+    - refreshed `docs/SECURITY.md` and `docs/API.md` for M6 behavior.
+- M7: in progress (`web` visual redesign pass):
+  - Rebuilt app shell and all business pages (`Dashboard`, `Create/Edit`, `Settings`, `Terminal`) into a unified dark theme.
+  - Added shared front-end design tokens and reusable UI primitives in `web/src/styles.css`.
+  - Removed non-essential decorative UI (avatar/notification/footer blocks) while keeping existing routes and API behavior intact.
+  - Preserved runtime control capabilities and WebSocket flows (`/ws/v1/events`, `/ws/v1/term/{id}`), with layout-only refresh plus light display formatting improvements.
+
+## Environment & Build Status (2026-03-01)
+- Dependency isolation baseline remains workspace-local (`pnpm` lockfile in repo root; no global installs).
+- Verification completed after M6 changes:
+  - `cargo fmt --manifest-path daemon/Cargo.toml` passed.
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (7/7).
+  - `pnpm -C web build` passed.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/build-portable.ps1` passed and produced:
+    - `artifacts/ai-cli-manager-win-x64.zip` (~3.2 MB in this session).
+- Verification completed after M7 web redesign pass:
+  - `pnpm -C web build` passed (TypeScript + Vite production build).
+
+## Session Log (2026-03-01)
+- Implemented M4 backend event + metrics pipeline.
+- Implemented M4 dashboard events-first refresh and fallback polling behavior.
+- Implemented M5 auth/LAN hardening and settings/pairing UX:
+  - daemon: loopback restriction for `bind_address` update + 403 error mapping,
+  - web: settings edit/apply, token copy/rotate, pairing URI + QR generation,
+  - docs/openapi: security guidance + settings endpoint contract refresh.
+- Re-ran verification commands from repo root:
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (7 passed, 0 failed) with existing dead-code warnings in `daemon/src/config.rs` helper methods.
+  - `pnpm -C web build` passed; Vite production build completed and emitted `web/dist` assets.
+- Implemented M6 daemon+PWA portable delivery:
+  - daemon static hosting with `AICLI_WEB_DIR` + `<exe_dir>/web` default and SPA fallback,
+  - release packaging script output under `artifacts/`,
+  - Windows startup/autostart/token utility scripts,
+  - deployment/security/API docs refresh for install + troubleshooting flow.
+- Re-ran packaging verification:
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/build-portable.ps1` passed and generated:
+    - `artifacts/ai-cli-manager-win-x64/`
+    - `artifacts/ai-cli-manager-win-x64.zip`
+- Re-ran portable packaging script again:
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/build-portable.ps1` passed (exit code `0`) and refreshed:
+    - `artifacts/ai-cli-manager-win-x64/`
+    - `artifacts/ai-cli-manager-win-x64.zip`
+- Verification rerun:
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (exit code `0`): `7 passed, 0 failed` with existing dead-code warning in `daemon/src/config.rs`.
+- Implemented web redesign pass (M7 in progress):
+  - added global dark design system in `web/src/styles.css`,
+  - refactored app shell navigation in `web/src/App.tsx`,
+  - rebuilt `web/src/pages/Dashboard.tsx` card layout while retaining events/polling and instance actions,
+  - rebuilt `web/src/pages/InstanceForm.tsx` (create/edit) with existing backend field semantics (`config_mode`: `none/path/inline`),
+  - rebuilt `web/src/pages/Settings.tsx` two-column layout with existing token/runtime/pairing behavior,
+  - rebuilt `web/src/pages/Terminal.tsx` to match unified style without changing terminal protocol.
+- Verification rerun after redesign:
+  - `pnpm -C web build` passed (Vite warning only: main JS chunk > 500 kB due existing bundle composition).
+
+## Current Runtime Architecture (Daemon)
+- Process state keyed by `instance_id`, each entry contains:
+  - operation lock (serialize start/stop/restart),
+  - runtime snapshot,
+  - last published runtime snapshot (event de-dup),
+  - optional running child handle (`pipes` or `pty`),
+  - optional input writer handle,
+  - optional PTY master (for resize),
+  - output ring buffer (1 MiB),
+  - output broadcast channel for WS terminal subscribers.
+- Global process event bus:
+  - `broadcast::Sender<ProcessEvent>` in `ProcessManager`,
+  - consumed by `/ws/v1/events`.
+- Metrics pipeline:
+  - background task calls `sample_metrics_once()` every 1 second,
+  - `sysinfo` refreshes running PIDs CPU/memory,
+  - runtime updates are published as `instance_status` events.
+- Lifecycle behavior:
+  - `start`: validates state, chooses backend by `use_pty`, spawns process, launches output readers.
+  - `stop`: closes stdin, graceful wait, force-kill fallback, clears runtime attachment count and metrics.
+  - `restart`: stop then start.
+  - `runtime`: refreshes child state via `try_wait` and publishes changes if state changed.
+- Terminal behavior:
+  - `/ws/v1/term/{id}` attaches only to running instances,
+  - historical output served via `tail_begin + binary`,
+  - live output pushed as binary frames from broadcast channel,
+  - client input written to active backend stdin,
+  - resize forwarded to PTY backend only.
+- Events behavior:
+  - `/ws/v1/events` pushes text JSON frames for runtime changes and periodic metrics.
+- Static UI behavior:
+  - daemon serves packaged web assets from `AICLI_WEB_DIR` (or `<daemon_exe_dir>/web` by default),
+  - unknown non-API/non-WS routes fall back to `index.html` for SPA routing.
+- Security/settings behavior:
+  - `/api/v1/*` requires bearer token via REST header middleware.
+  - `/ws/v1/*` requires bearer token via header or query-token fallback middleware.
+  - `/api/v1/settings` allows `bind_address` mutation only from loopback client addresses.
+
+## Testing Added
+- `daemon/src/process/mod.rs` tests include:
+  - ring buffer tail/truncation semantics,
+  - pipes start/stop with output capture,
+  - attach/detach updates `clients_attached`,
+  - lifecycle event publish (`start/stop`),
+  - attach/detach event publish (`clients_attached`),
+  - no duplicate event on stable runtime refresh.
+- `daemon/src/main.rs` route test:
+  - verifies `/` and deep-link SPA route serve `index.html`,
+  - verifies `/health` remains reachable,
+  - verifies `/api/v1/instances` still returns `401` without token.
+
+## Known Gaps / TODO
+- `client/` (Tauri desktop wrapper) still placeholder.
+- `packages/api-client` schema generation + typed fetch wrapper still not implemented.
+- Portable release is zip-only (no MSI/NSIS installer yet).
+- Release automation is local-script only (no CI artifacts/release pipeline yet).
+- Dashboard metrics now include unit formatting and bars, but still lack trend/sparkline and host-normalized scale.
+- No dedicated integration test for `/ws/v1/events` network path yet (unit tests cover process event emission).
+- No dedicated integration test yet for loopback-only settings update behavior.
+- Pairing approval flow endpoint (`/api/v1/auth/pair`) is still not implemented (current pairing is token + address QR).
+
+## Next Recommended Step
+- M7 implementation options:
+  - bootstrap `client/` desktop wrapper (Tauri v2) and align with existing web UI routes,
+  - add CI build pipeline for portable artifacts,
+  - add installer track (MSI/NSIS) after desktop wrapper baseline is stable.

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI CLI Manager - Settings</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#6366f1", // Indigo/Purple accent
+                        primaryHover: "#4f46e5",
+                        "background-light": "#f3f4f6",
+                        "background-dark": "#0f172a", // Dark slate background
+                        "card-light": "#ffffff",
+                        "card-dark": "#1e293b", // Slightly lighter slate for cards
+                        "border-light": "#e5e7eb",
+                        "border-dark": "#334155",
+                        "text-light": "#111827",
+                        "text-dark": "#e2e8f0",
+                        "text-muted-light": "#6b7280",
+                        "text-muted-dark": "#94a3b8",
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.5rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark font-sans antialiased min-h-screen flex flex-col transition-colors duration-200">
+<nav class="bg-card-light dark:bg-card-dark border-b border-border-light dark:border-border-dark px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+<div class="flex items-center space-x-8">
+<div class="flex items-center space-x-3">
+<div class="bg-primary/10 p-2 rounded-lg">
+<span class="material-symbols-outlined text-primary text-2xl">terminal</span>
+</div>
+<span class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">AI CLI Manager</span>
+</div>
+<div class="hidden md:flex items-center space-x-1">
+<a class="px-3 py-2 rounded-md text-sm font-medium text-text-muted-light dark:text-text-muted-dark hover:text-primary dark:hover:text-primary hover:bg-gray-50 dark:hover:bg-white/5 transition-all" href="#">Dashboard</a>
+<a class="px-3 py-2 rounded-md text-sm font-medium text-text-muted-light dark:text-text-muted-dark hover:text-primary dark:hover:text-primary hover:bg-gray-50 dark:hover:bg-white/5 transition-all" href="#">New Instance</a>
+<a class="px-3 py-2 rounded-md text-sm font-medium text-primary bg-primary/10" href="#">Settings</a>
+</div>
+</div>
+<div class="flex items-center space-x-4">
+<button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/5 text-text-muted-light dark:text-text-muted-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<div class="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-violet-600 flex items-center justify-center text-white font-bold text-sm shadow-md ring-2 ring-white dark:ring-[#0f172a] cursor-pointer">
+                JD
+            </div>
+</div>
+</nav>
+<main class="flex-grow p-6 lg:p-10 max-w-7xl mx-auto w-full">
+<div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">Settings</h1>
+<p class="text-text-muted-light dark:text-text-muted-dark">Manage your CLI configuration, pairing tokens, and runtime environment.</p>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+<div class="space-y-8">
+<div class="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
+<h2 class="text-lg font-semibold text-gray-900 dark:text-white">General Settings</h2>
+<span class="material-symbols-outlined text-text-muted-light dark:text-text-muted-dark">tune</span>
+</div>
+<div class="p-6 space-y-6">
+<div class="space-y-2">
+<label class="block text-sm font-medium text-text-muted-light dark:text-text-muted-dark flex items-center gap-1">
+                                Daemon base URL
+                                <span class="material-symbols-outlined text-[16px] text-text-muted-light dark:text-text-muted-dark cursor-help" title="The base URL where the daemon is listening">help</span>
+</label>
+<div class="relative rounded-md shadow-sm">
+<input class="block w-full rounded-lg border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark text-gray-900 dark:text-white focus:border-primary focus:ring-primary sm:text-sm py-2.5 px-3 shadow-sm transition-colors" type="text" value="http://127.0.0.1:8765"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="block text-sm font-medium text-text-muted-light dark:text-text-muted-dark">Token</label>
+<div class="flex flex-col sm:flex-row gap-2">
+<div class="relative flex-grow">
+<input class="block w-full rounded-lg border-border-light dark:border-border-dark bg-gray-100 dark:bg-gray-900/50 text-text-muted-light dark:text-text-muted-dark sm:text-sm py-2.5 px-3 font-mono" readonly="" type="text" value="68927c78-9b38-41f8-8967-5656a1fd01e4"/>
+</div>
+<div class="flex gap-2">
+<button class="inline-flex items-center px-3 py-2 border border-border-light dark:border-border-dark shadow-sm text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-card-dark hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+<span class="material-symbols-outlined text-[18px] mr-2">content_copy</span>
+                                        Copy
+                                    </button>
+<button class="inline-flex items-center px-3 py-2 border border-border-light dark:border-border-dark shadow-sm text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-card-dark hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+<span class="material-symbols-outlined text-[18px] mr-2">autorenew</span>
+                                        Rotate
+                                    </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
+<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Daemon Runtime</h2>
+<span class="material-symbols-outlined text-text-muted-light dark:text-text-muted-dark">dns</span>
+</div>
+<div class="p-6 space-y-6">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+<div class="space-y-2">
+<label class="block text-sm font-medium text-text-muted-light dark:text-text-muted-dark">Bind Address</label>
+<input class="block w-full rounded-lg border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark text-gray-900 dark:text-white focus:border-primary focus:ring-primary sm:text-sm py-2.5 px-3 shadow-sm transition-colors" type="text" value="127.0.0.1"/>
+</div>
+<div class="space-y-2">
+<label class="block text-sm font-medium text-text-muted-light dark:text-text-muted-dark">Port</label>
+<input class="block w-full rounded-lg border-border-light dark:border-border-dark bg-background-light dark:bg-background-dark text-gray-900 dark:text-white focus:border-primary focus:ring-primary sm:text-sm py-2.5 px-3 shadow-sm transition-colors" type="text" value="8765"/>
+</div>
+</div>
+<div class="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-900/30 rounded-lg p-4">
+<div class="flex">
+<div class="flex-shrink-0">
+<span class="material-symbols-outlined text-yellow-600 dark:text-yellow-500 text-sm">info</span>
+</div>
+<div class="ml-3">
+<p class="text-sm text-yellow-700 dark:text-yellow-400">
+                                        Note: Changing bind address requires a Daemon restart manually.
+                                    </p>
+</div>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+<button class="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2.5 border border-border-light dark:border-border-dark shadow-sm text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-card-dark hover:bg-gray-50 dark:hover:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+<span class="material-symbols-outlined text-[18px] mr-2">sync</span>
+                                Fetch Settings
+                            </button>
+<button class="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2.5 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-primary hover:bg-primaryHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+                                Apply Daemon Settings
+                            </button>
+</div>
+</div>
+</div>
+</div>
+<div class="space-y-8">
+<div class="bg-card-light dark:bg-card-dark rounded-xl border border-border-light dark:border-border-dark shadow-sm overflow-hidden h-full flex flex-col">
+<div class="px-6 py-4 border-b border-border-light dark:border-border-dark flex items-center justify-between">
+<h2 class="text-lg font-semibold text-gray-900 dark:text-white">Mobile Pairing</h2>
+<span class="material-symbols-outlined text-text-muted-light dark:text-text-muted-dark">qr_code_2</span>
+</div>
+<div class="p-6 flex-grow flex flex-col items-center justify-center space-y-8">
+<div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+<img alt="Pairing QR Code" class="w-48 h-48 md:w-56 md:h-56 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUGZvfOyUVDxKiC01hnGYpQxiXm_2mP4NSuGsp-OuBfW4jnmr4phjuyERbLtIPG1A0oOt0ACj0S5Il-bc1MpHAP5sCjR0PgtQDdjCqsMybHo-m25x3H76ELQQ2liLK_7q74bjdmHEBJdM4xHKdecG02YVkZuu2JUpB46PQYef56TDytlXf_uCT2pAip_sNJCSEnWv2vhX0LIVlPzWlPbmSji__82uGeWlRr889y2pG_LPmqG4ZnMGWPpoW1k_x2-tPkV0eBoGynPc"/>
+</div>
+<div class="w-full space-y-4">
+<div class="relative group w-full text-center">
+<p class="text-sm text-text-muted-light dark:text-text-muted-dark mb-1">
+                                    Scan to pair with mobile app
+                                </p>
+<p class="text-xs text-text-muted-light dark:text-text-muted-dark opacity-70">
+                                    Requires AI CLI Manager Mobile App v1.2+
+                                </p>
+</div>
+<div class="bg-gray-100 dark:bg-background-dark border border-border-light dark:border-border-dark rounded-lg p-3 text-xs break-all font-mono text-text-muted-light dark:text-text-muted-dark leading-relaxed select-all">
+                                aicli-manager://pair?baseUrl=http%3A%2F%2F127.0.0.1%3A8765&amp;token=68927c78-9b38-41f8-8967-5656a1fd01e4
+                            </div>
+<button class="w-full inline-flex justify-center items-center px-4 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-primary hover:bg-primaryHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+<span class="material-symbols-outlined text-[20px] mr-2">content_copy</span>
+                                Copy Pairing URI
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<footer class="bg-card-light dark:bg-card-dark border-t border-border-light dark:border-border-dark px-6 py-3 mt-auto">
+<div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center text-xs text-text-muted-light dark:text-text-muted-dark space-y-2 md:space-y-0">
+<div class="flex items-center space-x-4">
+<div class="flex items-center space-x-2">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+</span>
+<span class="font-medium text-gray-700 dark:text-gray-300">System Healthy</span>
+</div>
+<div class="h-3 w-px bg-border-light dark:bg-border-dark"></div>
+<div class="font-mono opacity-80">v0.1.0</div>
+</div>
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-1.5 opacity-80 hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[14px]">public</span>
+<span>REST: Bearer Auth</span>
+</div>
+<div class="flex items-center space-x-1.5 opacity-80 hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[14px]">wifi_tethering</span>
+<span>WS: Token Auth</span>
+</div>
+<div class="flex items-center space-x-1.5 opacity-80 hover:opacity-100 transition-opacity cursor-help" title="Uptime">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+<span>1h 15m</span>
+</div>
+</div>
+</div>
+</footer>
+<script>
+        if (localStorage.getItem('color-theme') === 'light') {
+            document.documentElement.classList.remove('dark');
+        } else {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+
+</body></html>
