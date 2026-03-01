@@ -1,6 +1,7 @@
 import React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import type { EventsMessage, Instance, InstanceStatusMessage, ListInstancesResponse, RuntimeStatus } from "../lib/types";
 import {
   buildWsUrl,
   deleteInstance,
@@ -9,6 +10,16 @@ import {
   startInstance,
   stopInstance,
 } from "../lib/api";
+import {
+  canOpenTerminal,
+  canRestart,
+  canStart,
+  canStop,
+  formatCpu,
+  formatMemory,
+  patchInstanceRuntime,
+  statusClass,
+} from "./dashboard-utils";
 
 type EventsConnection = "connecting" | "connected" | "disconnected";
 type NoticeLevel = "info" | "error";
@@ -17,47 +28,6 @@ const POLL_INTERVAL_MS = 2000;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 10000;
 
-function asNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function formatCpu(value: unknown): { label: string; percent: number } {
-  const cpu = asNumber(value);
-  if (cpu === null) return { label: "-", percent: 0 };
-  const clamped = Math.max(0, Math.min(100, cpu));
-  const digits = clamped < 10 ? 1 : 0;
-  return { label: `${clamped.toFixed(digits)}%`, percent: clamped };
-}
-
-function formatMemory(value: unknown): { label: string; percent: number } {
-  const bytes = asNumber(value);
-  if (bytes === null || bytes < 0) return { label: "-", percent: 0 };
-  const mb = bytes / (1024 * 1024);
-  const gb = mb / 1024;
-  const label = gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(mb)} MB`;
-  const percent = Math.max(0, Math.min(100, (mb / 2048) * 100));
-  return { label, percent };
-}
-
-function statusClass(status: string | undefined): string {
-  if (!status) return "status-badge status-generic";
-  switch (status) {
-    case "running":
-      return "status-badge status-running";
-    case "stopped":
-      return "status-badge status-stopped";
-    case "error":
-      return "status-badge status-error";
-    default:
-      return "status-badge status-generic";
-  }
-}
-
 export default function Dashboard() {
   const qc = useQueryClient();
   const [pollingEnabled, setPollingEnabled] = React.useState(true);
@@ -65,7 +35,7 @@ export default function Dashboard() {
   const [notice, setNotice] = React.useState<{ level: NoticeLevel; text: string } | null>(null);
   const [filterText, setFilterText] = React.useState("");
 
-  const q = useQuery({
+  const q = useQuery<ListInstancesResponse, Error>({
     queryKey: ["instances"],
     queryFn: listInstances,
     refetchInterval: pollingEnabled ? POLL_INTERVAL_MS : false,
@@ -112,28 +82,23 @@ export default function Dashboard() {
       ws.onmessage = (event) => {
         if (typeof event.data !== "string") return;
 
-        let msg: any;
+        let msg: EventsMessage;
         try {
           msg = JSON.parse(event.data);
         } catch {
           return;
         }
 
-        if (msg?.type === "instance_status" && typeof msg.id === "string" && msg.runtime) {
+        if (msg.type === "instance_status" && typeof msg.id === "string" && msg.runtime && typeof msg.runtime === "object") {
+          const statusMsg = msg as InstanceStatusMessage;
           let shouldRefetch = false;
-          qc.setQueryData(["instances"], (previous: any) => {
+          qc.setQueryData<ListInstancesResponse | undefined>(["instances"], (previous) => {
             if (!previous || !Array.isArray(previous.instances)) {
               shouldRefetch = true;
               return previous;
             }
 
-            let found = false;
-            const instances = previous.instances.map((it: any) => {
-              if (it.id !== msg.id) return it;
-              found = true;
-              return { ...it, runtime: msg.runtime };
-            });
-
+            const { instances, found } = patchInstanceRuntime(previous.instances, statusMsg.id, statusMsg.runtime);
             if (!found) {
               shouldRefetch = true;
               return previous;
@@ -185,14 +150,14 @@ export default function Dashboard() {
     };
   }, [qc]);
 
-  const instances: any[] = React.useMemo(() => {
+  const instances = React.useMemo<Instance[]>(() => {
     const all = q.data?.instances || [];
     const keyword = filterText.trim().toLowerCase();
     if (!keyword) return all;
-    return all.filter((it: any) => {
+    return all.filter((it) => {
       return [it.name, it.command, it.cwd]
-        .filter((v) => typeof v === "string" && v.length > 0)
-        .some((v) => (v as string).toLowerCase().includes(keyword));
+        .filter((v): v is string => typeof v === "string" && v.length > 0)
+        .some((v) => v.toLowerCase().includes(keyword));
     });
   }, [q.data?.instances, filterText]);
 
@@ -240,15 +205,24 @@ export default function Dashboard() {
       </div>
 
       {q.isLoading && <div className="alert info">Loading instances...</div>}
-      {q.isError && <div className="alert error">{(q.error as Error).message}</div>}
-      {notice && <div className={`alert ${notice.level === "error" ? "error" : "info"} space-top`}>{notice.text}</div>}
+      {q.isError && <div className="alert error">{q.error.message}</div>}
+      {notice && (
+        <div className={`alert ${notice.level === "error" ? "error" : "info"} space-top`} role="status" aria-live="polite">
+          {notice.text}
+        </div>
+      )}
 
       <div className="instance-grid space-top">
         {instances.map((it) => {
           const runtime = it.runtime || {};
-          const status = typeof runtime.status === "string" ? runtime.status : "unknown";
+          const status = typeof runtime.status === "string" ? runtime.status : ("unknown" as RuntimeStatus);
+          const allowStart = canStart(status);
+          const allowStop = canStop(status);
+          const allowRestart = canRestart(status);
+          const allowTerminal = canOpenTerminal(status);
           const cpu = formatCpu(runtime.cpu_percent);
           const mem = formatMemory(runtime.mem_bytes);
+
           return (
             <article key={it.id} className="instance-card">
               <div className="instance-head">
@@ -293,24 +267,49 @@ export default function Dashboard() {
               <hr className="card-divider" />
 
               <div className="card-actions">
-                <button className="btn btn-success" onClick={() => void runAction(() => startInstance(it.id))}>
+                <button
+                  className="btn btn-success"
+                  type="button"
+                  onClick={() => void runAction(() => startInstance(it.id))}
+                  disabled={!allowStart}
+                  aria-label={`Start instance ${it.name}`}
+                >
                   Start
                 </button>
-                <button className="btn btn-danger" onClick={() => void runAction(() => stopInstance(it.id))}>
+                <button
+                  className="btn btn-danger"
+                  type="button"
+                  onClick={() => void runAction(() => stopInstance(it.id))}
+                  disabled={!allowStop}
+                  aria-label={`Stop instance ${it.name}`}
+                >
                   Stop
                 </button>
-                <button className="btn btn-warning" onClick={() => void runAction(() => restartInstance(it.id))}>
+                <button
+                  className="btn btn-warning"
+                  type="button"
+                  onClick={() => void runAction(() => restartInstance(it.id))}
+                  disabled={!allowRestart}
+                  aria-label={`Restart instance ${it.name}`}
+                >
                   Restart
                 </button>
-                <Link className="btn btn-secondary" to={`/instances/${it.id}/term`}>
-                  Terminal
-                </Link>
+                {allowTerminal ? (
+                  <Link className="btn btn-secondary" to={`/instances/${it.id}/term`} aria-label={`Open terminal for ${it.name}`}>
+                    Terminal
+                  </Link>
+                ) : (
+                  <button className="btn btn-secondary" type="button" disabled aria-label={`Terminal unavailable for ${it.name}`}>
+                    Terminal
+                  </button>
+                )}
                 <span className="push-right" />
                 <Link className="btn btn-secondary" to={`/instances/${it.id}/edit`}>
                   Edit
                 </Link>
                 <button
                   className="btn btn-secondary"
+                  type="button"
                   onClick={() =>
                     void runAction(async () => {
                       if (!window.confirm("Delete instance?")) return;

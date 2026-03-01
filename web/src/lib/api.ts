@@ -1,13 +1,15 @@
+import type {
+  CreateOrUpdateInstanceRequest,
+  DaemonSettings,
+  GetInstanceResponse,
+  ListInstancesResponse,
+  RotateTokenResponse,
+  UpdateSettingsRequest,
+} from "./types";
+
 export type ApiConfig = {
   baseUrl: string; // e.g. http://127.0.0.1:8765
-  token: string;   // bearer token
-};
-
-export type DaemonSettings = {
-  bind_address: string;
-  port: number;
-  data_dir: string;
-  token: string;
+  token: string; // bearer token
 };
 
 export class ApiError extends Error {
@@ -77,19 +79,19 @@ export async function health() {
   return res.json();
 }
 
-export async function listInstances() {
+export async function listInstances(): Promise<ListInstancesResponse> {
   return apiFetch("/api/v1/instances?include_runtime=true");
 }
 
-export async function getInstance(id: string) {
+export async function getInstance(id: string): Promise<GetInstanceResponse> {
   return apiFetch(`/api/v1/instances/${id}?include_runtime=true`);
 }
 
-export async function createInstance(payload: any) {
+export async function createInstance(payload: CreateOrUpdateInstanceRequest) {
   return apiFetch("/api/v1/instances", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export async function updateInstance(id: string, payload: any) {
+export async function updateInstance(id: string, payload: CreateOrUpdateInstanceRequest) {
   return apiFetch(`/api/v1/instances/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
 
@@ -111,13 +113,13 @@ export async function getSettings() {
   return apiFetch("/api/v1/settings") as Promise<DaemonSettings>;
 }
 
-export async function updateSettings(payload: { bind_address?: string; port?: number }) {
+export async function updateSettings(payload: UpdateSettingsRequest) {
   return apiFetch("/api/v1/settings", {
     method: "PUT",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   }) as Promise<DaemonSettings>;
 }
 
-export async function rotateToken() {
-  return apiFetch("/api/v1/auth/token/rotate", { method: "POST" });
+export async function rotateToken(): Promise<RotateTokenResponse> {
+  return apiFetch("/api/v1/auth/token/rotate", { method: "POST" }) as Promise<RotateTokenResponse>;
 }

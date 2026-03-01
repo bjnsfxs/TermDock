@@ -81,11 +81,14 @@
     - `README.md` now documents daemon-hosted UI and portable build flow,
     - added `docs/DEPLOY_WINDOWS.md`,
     - refreshed `docs/SECURITY.md` and `docs/API.md` for M6 behavior.
-- M7: in progress (`web` visual redesign pass):
-  - Rebuilt app shell and all business pages (`Dashboard`, `Create/Edit`, `Settings`, `Terminal`) into a unified dark theme.
-  - Added shared front-end design tokens and reusable UI primitives in `web/src/styles.css`.
-  - Removed non-essential decorative UI (avatar/notification/footer blocks) while keeping existing routes and API behavior intact.
-  - Preserved runtime control capabilities and WebSocket flows (`/ws/v1/events`, `/ws/v1/term/{id}`), with layout-only refresh plus light display formatting improvements.
+- M7: completed in this session (`web` quality closeout):
+  - Completed design-system refinement and page-level UX polish across `Dashboard`, `Create/Edit`, `Settings`, and `Terminal`.
+  - Removed `any`-based web data flow by introducing shared API/runtime/WS TypeScript models and page utility modules.
+  - Added runtime-aware action guards on dashboard cards (start/stop/restart/terminal enablement by status).
+  - Extended create/edit form to expose `enabled` and JSON `env` editing with explicit client-side validation.
+  - Hardened settings interactions with deterministic loading states, stable notice timing, and strict port validation.
+  - Added route-level lazy loading plus Vite manual chunk splitting (`react-vendor`, `xterm`, `qrcode`), eliminating prior >500 kB warning in default output threshold.
+  - Added lightweight web test suite (Vitest) covering URL building, dashboard runtime patch logic, instance payload validation, and settings port validation.
 
 ## Environment & Build Status (2026-03-01)
 - Dependency isolation baseline remains workspace-local (`pnpm` lockfile in repo root; no global installs).
@@ -97,6 +100,9 @@
     - `artifacts/ai-cli-manager-win-x64.zip` (~3.2 MB in this session).
 - Verification completed after M7 web redesign pass:
   - `pnpm -C web build` passed (TypeScript + Vite production build).
+- Verification completed after M7 quality closeout:
+  - `pnpm -C web test` passed (`4` files, `12` tests).
+  - `pnpm -C web build` passed with split output chunks (no chunk-size warning emitted).
 
 ## Session Log (2026-03-01)
 - Implemented M4 backend event + metrics pipeline.
@@ -150,6 +156,22 @@
   - orphan runtimes (process state exists, DB row missing) can be terminated via stop endpoint again.
 - Verification rerun:
   - `cargo test --manifest-path daemon/Cargo.toml` passed (`13 passed, 0 failed`) with existing dead-code warning in `daemon/src/config.rs` for unused helper methods.
+- Completed M7 quality closeout implementation:
+  - `web/src/lib/types.ts`: added shared typed API + WS message contracts.
+  - `web/src/lib/api.ts`: migrated instance/settings/token calls to explicit request/response typing.
+  - `web/src/pages/Dashboard.tsx`: replaced ad-hoc parsing with typed event handling, extracted runtime patch/action guard utilities, and added action disable semantics by status.
+  - `web/src/pages/InstanceForm.tsx`: added `enabled` control, JSON env editor, and payload build/validation utility integration.
+  - `web/src/pages/Settings.tsx`: added loading guards (`fetch/apply/rotate`), safer notice timer handling, and strict port validation utility.
+  - `web/src/pages/Terminal.tsx`: tightened WS control message typing and reconnect UI behavior.
+  - `web/src/App.tsx` + `web/vite.config.ts`: implemented lazy routes and manual chunk strategy for bundle-size reduction.
+  - Added Vitest tests:
+    - `web/src/lib/api.test.ts`
+    - `web/src/pages/dashboard-utils.test.ts`
+    - `web/src/pages/instance-form-utils.test.ts`
+    - `web/src/pages/settings-utils.test.ts`
+- Verification rerun after M7 closeout:
+  - `pnpm -C web test` passed (`12 passed, 0 failed`).
+  - `pnpm -C web build` passed with chunk split outputs (`react-vendor`, `xterm`, `qrcode`) and no default chunk warning.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
@@ -219,7 +241,7 @@
 - Pairing approval flow endpoint (`/api/v1/auth/pair`) is still not implemented (current pairing is token + address QR).
 
 ## Next Recommended Step
-- M7 implementation options:
-  - bootstrap `client/` desktop wrapper (Tauri v2) and align with existing web UI routes,
-  - add CI build pipeline for portable artifacts,
+- M8 implementation options:
+  - bootstrap `client/` desktop wrapper (Tauri v2) and align with existing web routes + settings persistence contract,
+  - add CI pipeline for daemon/web build + portable artifact publication,
   - add installer track (MSI/NSIS) after desktop wrapper baseline is stable.

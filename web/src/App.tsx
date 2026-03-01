@@ -1,9 +1,10 @@
 import React from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import Dashboard from "./pages/Dashboard";
-import InstanceForm from "./pages/InstanceForm";
-import TerminalPage from "./pages/Terminal";
-import Settings from "./pages/Settings";
+
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const InstanceForm = React.lazy(() => import("./pages/InstanceForm"));
+const TerminalPage = React.lazy(() => import("./pages/Terminal"));
+const Settings = React.lazy(() => import("./pages/Settings"));
 
 export default function App() {
   return (
@@ -32,13 +33,21 @@ export default function App() {
       </header>
 
       <main className="page-wrap">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/instances/new" element={<InstanceForm mode="create" />} />
-          <Route path="/instances/:id/edit" element={<InstanceForm mode="edit" />} />
-          <Route path="/instances/:id/term" element={<TerminalPage />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
+        <React.Suspense
+          fallback={
+            <section className="surface-card card-content">
+              <p className="muted">Loading page...</p>
+            </section>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/instances/new" element={<InstanceForm mode="create" />} />
+            <Route path="/instances/:id/edit" element={<InstanceForm mode="edit" />} />
+            <Route path="/instances/:id/term" element={<TerminalPage />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </React.Suspense>
       </main>
     </div>
   );

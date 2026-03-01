@@ -4,6 +4,7 @@ import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import { buildWsUrl } from "../lib/api";
+import type { TerminalControlMessage } from "../lib/types";
 
 type SessionStatus = "connecting" | "connected" | "disconnected";
 
@@ -79,6 +80,7 @@ export default function TerminalPage() {
 
     ws.onopen = () => {
       setSessionStatus("connected");
+      setErr(null);
       term.writeln("\x1b[33m[connected]\x1b[0m");
       sendJson({ type: "hello", client_name: "web", client_id: crypto.randomUUID() });
       sendJson({ type: "tail", bytes: 8192 });
@@ -88,7 +90,7 @@ export default function TerminalPage() {
     ws.onmessage = (ev) => {
       if (typeof ev.data === "string") {
         try {
-          const msg = JSON.parse(ev.data);
+          const msg = JSON.parse(ev.data) as TerminalControlMessage;
           switch (msg.type) {
             case "status":
               if (typeof msg.backend === "string") setBackend(msg.backend);
@@ -165,16 +167,29 @@ export default function TerminalPage() {
         <div className="terminal-toolbar">
           <div className="health-row">
             <span className={statusBadgeClass(sessionStatus)}>{sessionStatus}</span>
-            <span className="health-pill">backend: <strong className="mono-text">{backend}</strong></span>
-            <span className="health-pill">attached clients: <strong>{clients}</strong></span>
+            <span className="health-pill">
+              backend: <strong className="mono-text">{backend}</strong>
+            </span>
+            <span className="health-pill">
+              attached clients: <strong>{clients}</strong>
+            </span>
           </div>
 
-          <button className="btn btn-secondary" type="button" onClick={() => setSessionNonce((v) => v + 1)}>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => setSessionNonce((v) => v + 1)}
+            disabled={sessionStatus === "connecting"}
+          >
             Reconnect
           </button>
         </div>
 
-        {err && <div className="alert error">{err}</div>}
+        {err && (
+          <div className="alert error" role="status" aria-live="polite">
+            {err}
+          </div>
+        )}
         <div ref={ref} className="terminal-frame space-top" />
       </div>
     </section>
