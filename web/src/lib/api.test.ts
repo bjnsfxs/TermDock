@@ -35,6 +35,42 @@ describe("resolveDefaultBaseUrl", () => {
     ).toBe("https://daemon.example.com");
   });
 
+  it("keeps localhost origin for local web development", () => {
+    expect(
+      resolveDefaultBaseUrl({
+        protocol: "http:",
+        origin: "http://localhost:5173",
+      })
+    ).toBe("http://localhost:5173");
+  });
+
+  it("falls back to loopback for tauri localhost asset origin", () => {
+    expect(
+      resolveDefaultBaseUrl({
+        protocol: "http:",
+        origin: "http://tauri.localhost",
+      })
+    ).toBe("http://127.0.0.1:8765");
+  });
+
+  it("falls back to loopback for https custom-scheme localhost asset origin", () => {
+    expect(
+      resolveDefaultBaseUrl({
+        protocol: "https:",
+        origin: "https://myapp.localhost",
+      })
+    ).toBe("http://127.0.0.1:8765");
+  });
+
+  it("falls back to loopback when origin is malformed", () => {
+    expect(
+      resolveDefaultBaseUrl({
+        protocol: "https:",
+        origin: "not a url",
+      })
+    ).toBe("http://127.0.0.1:8765");
+  });
+
   it("falls back to loopback for non-http protocols", () => {
     expect(
       resolveDefaultBaseUrl({

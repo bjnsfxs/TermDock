@@ -32,7 +32,18 @@ export function resolveDefaultBaseUrl(locationLike?: {
 }): string {
   const protocol = locationLike?.protocol?.toLowerCase();
   if ((protocol === "http:" || protocol === "https:") && locationLike?.origin) {
-    return locationLike.origin;
+    try {
+      const hostname = new URL(locationLike.origin).hostname.toLowerCase();
+
+      // Tauri custom protocols commonly map to http(s)://<scheme>.localhost.
+      if (hostname.endsWith(".localhost") && hostname !== "localhost") {
+        return FALLBACK_DAEMON_BASE_URL;
+      }
+
+      return locationLike.origin;
+    } catch {
+      return FALLBACK_DAEMON_BASE_URL;
+    }
   }
   return FALLBACK_DAEMON_BASE_URL;
 }

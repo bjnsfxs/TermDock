@@ -213,6 +213,17 @@
   - `pnpm -C web test` passed (`16 passed, 0 failed`).
   - `pnpm -C web build` passed.
   - `pnpm -C client build` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
+- Fixed M8 follow-up review issue (desktop default URL misrouting):
+  - `web/src/lib/api.ts`: `resolveDefaultBaseUrl` now treats `http(s)://*.localhost` (except bare `localhost`) as Tauri asset origins and falls back to `http://127.0.0.1:8765`.
+  - `web/src/lib/api.ts`: malformed `origin` values now safely fall back to daemon loopback default.
+  - `web/src/lib/api.test.ts`: expanded coverage for:
+    - local web dev `http://localhost:5173` keep-origin behavior,
+    - `http://tauri.localhost` fallback behavior,
+    - `https://<scheme>.localhost` fallback behavior,
+    - malformed-origin fallback behavior.
+- Verification rerun after desktop URL fix:
+  - `pnpm -C web test` passed (`20 passed, 0 failed`).
+  - `pnpm -C web build` passed.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
