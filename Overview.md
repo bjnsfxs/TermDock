@@ -342,6 +342,15 @@
     - `.tmp/`
     - `__tmp_*`
   - purpose: prevent accidental commit/upload of scratch binaries, PDBs, and one-off test scripts.
+- Fixed desktop bootstrap token handoff regression from review:
+  - `client/src-tauri/src/lib.rs`:
+    - `daemon_start_impl` now reloads daemon endpoint after `wait_for_health` and builds response from post-start snapshot,
+    - added endpoint snapshot merge helper to prefer post-start token and keep pre-start token as fallback,
+    - added unit tests covering token refresh/fallback and post-start base URL precedence.
+- Verification rerun after bootstrap token fix:
+  - `cargo fmt --manifest-path client/src-tauri/Cargo.toml` passed.
+  - `cargo test --manifest-path client/src-tauri/Cargo.toml` passed (`3 passed, 0 failed`).
+  - `cargo check --manifest-path client/src-tauri/Cargo.toml` passed.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:

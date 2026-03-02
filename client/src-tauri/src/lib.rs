@@ -1,5 +1,7 @@
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -7,8 +9,6 @@ use std::{
     time::Duration,
 };
 use tauri::Manager;
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 
 const FALLBACK_BASE_URL: &str = "http://127.0.0.1:8765";
 const START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -146,16 +146,16 @@ async fn daemon_bootstrap_impl(
 
 async fn daemon_start_impl(supervisor: &DaemonSupervisor) -> Result<DaemonActionResponse, String> {
     cleanup_dead_child(supervisor)?;
-    let endpoint = daemon_endpoint();
-    if health_ok(&endpoint.base_url).await {
+    let pre_start_endpoint = daemon_endpoint();
+    if health_ok(&pre_start_endpoint.base_url).await {
         let (managed, pid) = managed_process_info(supervisor)?;
         return Ok(DaemonActionResponse {
             status: DaemonStatus {
                 reachable: true,
                 managed,
                 pid,
-                base_url: endpoint.base_url,
-                auth_token: endpoint.token,
+                base_url: pre_start_endpoint.base_url,
+                auth_token: pre_start_endpoint.token,
                 message: Some("daemon already running".to_string()),
             },
         });
@@ -192,7 +192,8 @@ async fn daemon_start_impl(supervisor: &DaemonSupervisor) -> Result<DaemonAction
         *guard = Some(ManagedDaemon { child });
     }
 
-    wait_for_health(&endpoint.base_url, START_TIMEOUT).await?;
+    wait_for_health(&pre_start_endpoint.base_url, START_TIMEOUT).await?;
+    let endpoint = merge_endpoint_snapshot(pre_start_endpoint, daemon_endpoint());
     let (managed, pid) = managed_process_info(supervisor)?;
     Ok(DaemonActionResponse {
         status: DaemonStatus {
@@ -401,6 +402,16 @@ struct DaemonEndpoint {
     token: Option<String>,
 }
 
+fn merge_endpoint_snapshot(
+    pre_start: DaemonEndpoint,
+    post_start: DaemonEndpoint,
+) -> DaemonEndpoint {
+    DaemonEndpoint {
+        base_url: post_start.base_url,
+        token: post_start.token.or(pre_start.token),
+    }
+}
+
 fn daemon_endpoint() -> DaemonEndpoint {
     if let Some(cfg) = load_daemon_config_file() {
         let host = if cfg.bind_address == "0.0.0.0" || cfg.bind_address == "::" {
@@ -500,4 +511,56 @@ fn find_workspace_root(start: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{merge_endpoint_snapshot, DaemonEndpoint};
+
+    #[test]
+    fn merge_endpoint_snapshot_prefers_post_start_token() {
+        let pre_start = DaemonEndpoint {
+            base_url: "http://127.0.0.1:8765".to_string(),
+            token: None,
+        };
+        let post_start = DaemonEndpoint {
+            base_url: "http://127.0.0.1:8765".to_string(),
+            token: Some("new-token".to_string()),
+        };
+
+        let merged = merge_endpoint_snapshot(pre_start, post_start);
+        assert_eq!(merged.base_url, "http://127.0.0.1:8765");
+        assert_eq!(merged.token.as_deref(), Some("new-token"));
+    }
+
+    #[test]
+    fn merge_endpoint_snapshot_keeps_pre_start_token_as_fallback() {
+        let pre_start = DaemonEndpoint {
+            base_url: "http://127.0.0.1:8765".to_string(),
+            token: Some("existing-token".to_string()),
+        };
+        let post_start = DaemonEndpoint {
+            base_url: "http://127.0.0.1:8765".to_string(),
+            token: None,
+        };
+
+        let merged = merge_endpoint_snapshot(pre_start, post_start);
+        assert_eq!(merged.token.as_deref(), Some("existing-token"));
+    }
+
+    #[test]
+    fn merge_endpoint_snapshot_uses_post_start_base_url() {
+        let pre_start = DaemonEndpoint {
+            base_url: "http://127.0.0.1:8765".to_string(),
+            token: Some("old-token".to_string()),
+        };
+        let post_start = DaemonEndpoint {
+            base_url: "http://10.0.0.5:9000".to_string(),
+            token: Some("new-token".to_string()),
+        };
+
+        let merged = merge_endpoint_snapshot(pre_start, post_start);
+        assert_eq!(merged.base_url, "http://10.0.0.5:9000");
+        assert_eq!(merged.token.as_deref(), Some("new-token"));
+    }
 }
