@@ -161,6 +161,7 @@ async fn daemon_start_impl(supervisor: &DaemonSupervisor) -> Result<DaemonAction
             cmd.env("AICLI_DATA_DIR", data_dir);
         }
     }
+    stop_existing_managed_child(supervisor)?;
 
     let child = cmd
         .spawn()
@@ -185,6 +186,45 @@ async fn daemon_start_impl(supervisor: &DaemonSupervisor) -> Result<DaemonAction
             message: Some("daemon started".to_string()),
         },
     })
+}
+
+fn stop_existing_managed_child(supervisor: &DaemonSupervisor) -> Result<(), String> {
+    let mut guard = supervisor
+        .managed
+        .lock()
+        .map_err(|_| "daemon state lock poisoned".to_string())?;
+
+    let child_state = if let Some(managed) = guard.as_mut() {
+        managed
+            .child
+            .try_wait()
+            .map_err(|err| format!("failed to poll managed daemon process: {err}"))?
+    } else {
+        return Ok(());
+    };
+
+    if child_state.is_some() {
+        *guard = None;
+        return Ok(());
+    }
+
+    let Some(mut managed) = guard.take() else {
+        return Ok(());
+    };
+
+    if let Err(err) = managed.child.kill() {
+        *guard = Some(managed);
+        return Err(format!(
+            "failed to stop existing managed daemon before restart: {err}"
+        ));
+    }
+    if let Err(err) = managed.child.wait() {
+        *guard = Some(managed);
+        return Err(format!(
+            "failed to wait existing managed daemon before restart: {err}"
+        ));
+    }
+    Ok(())
 }
 
 async fn daemon_stop_impl(supervisor: &DaemonSupervisor) -> Result<DaemonActionResponse, String> {

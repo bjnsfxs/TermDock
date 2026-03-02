@@ -245,34 +245,20 @@ pub async fn pair_status(
                 AppError::internal("approved pair session is missing issued token")
             })?;
 
-            let now = now_rfc3339();
-            sqlx::query(
-                r#"
-                UPDATE pair_sessions
-                SET status = ?, issued_token = NULL, delivered_at = ?, updated_at = ?
-                WHERE id = ?
-                "#,
-            )
-            .bind(PAIR_STATUS_TOKEN_DELIVERED)
-            .bind(now.clone())
-            .bind(now)
-            .bind(&session.id)
-            .execute(&state.db)
-            .await?;
-
-            Ok(Json(PairStatusResponse {
-                status: "approved".to_string(),
-                device_id: session.issued_device_id,
-                device_token: Some(token),
-                message: None,
-            }))
+            if claim_approved_pair_token(&state, &session.id, &token).await? {
+                Ok(Json(PairStatusResponse {
+                    status: "approved".to_string(),
+                    device_id: session.issued_device_id,
+                    device_token: Some(token),
+                    message: None,
+                }))
+            } else {
+                Ok(Json(
+                    resolve_failed_approved_claim(&state, &session.id).await?,
+                ))
+            }
         }
-        PAIR_STATUS_TOKEN_DELIVERED => Ok(Json(PairStatusResponse {
-            status: "token-delivered".to_string(),
-            device_id: session.issued_device_id,
-            device_token: None,
-            message: Some("token already delivered".to_string()),
-        })),
+        PAIR_STATUS_TOKEN_DELIVERED => Ok(Json(token_delivered_response(session.issued_device_id))),
         _ => Ok(Json(PairStatusResponse {
             status: session.status,
             device_id: session.issued_device_id,
@@ -539,6 +525,90 @@ async fn maybe_expire_session(state: &AppState, row: &mut PairSessionRow) -> Res
     Ok(())
 }
 
+async fn claim_approved_pair_token(
+    state: &AppState,
+    pair_id: &str,
+    expected_token: &str,
+) -> Result<bool, AppError> {
+    let now = now_rfc3339();
+    let res = sqlx::query(
+        r#"
+        UPDATE pair_sessions
+        SET status = ?, issued_token = NULL, delivered_at = ?, updated_at = ?
+        WHERE id = ?
+          AND status = ?
+          AND issued_token = ?
+        "#,
+    )
+    .bind(PAIR_STATUS_TOKEN_DELIVERED)
+    .bind(now.clone())
+    .bind(now)
+    .bind(pair_id)
+    .bind(PAIR_STATUS_APPROVED)
+    .bind(expected_token)
+    .execute(&state.db)
+    .await?;
+    Ok(res.rows_affected() == 1)
+}
+
+async fn resolve_failed_approved_claim(
+    state: &AppState,
+    pair_id: &str,
+) -> Result<PairStatusResponse, AppError> {
+    let latest = get_pair_session(state, pair_id).await?;
+    match latest.status.as_str() {
+        PAIR_STATUS_TOKEN_DELIVERED => Ok(token_delivered_response(latest.issued_device_id)),
+        PAIR_STATUS_APPROVED => {
+            let latest_token = latest.issued_token.clone().ok_or_else(|| {
+                AppError::internal("approved pair session is missing issued token")
+            })?;
+
+            if claim_approved_pair_token(state, &latest.id, &latest_token).await? {
+                Ok(PairStatusResponse {
+                    status: "approved".to_string(),
+                    device_id: latest.issued_device_id,
+                    device_token: Some(latest_token),
+                    message: None,
+                })
+            } else {
+                let settled = get_pair_session(state, &latest.id).await?;
+                match settled.status.as_str() {
+                    PAIR_STATUS_TOKEN_DELIVERED => {
+                        Ok(token_delivered_response(settled.issued_device_id))
+                    }
+                    PAIR_STATUS_APPROVED => Ok(PairStatusResponse {
+                        status: "pending-approval".to_string(),
+                        device_id: settled.issued_device_id,
+                        device_token: None,
+                        message: Some("pair approval is settling; retry status poll".to_string()),
+                    }),
+                    _ => Ok(PairStatusResponse {
+                        status: settled.status,
+                        device_id: settled.issued_device_id,
+                        device_token: None,
+                        message: None,
+                    }),
+                }
+            }
+        }
+        _ => Ok(PairStatusResponse {
+            status: latest.status,
+            device_id: latest.issued_device_id,
+            device_token: None,
+            message: None,
+        }),
+    }
+}
+
+fn token_delivered_response(device_id: Option<String>) -> PairStatusResponse {
+    PairStatusResponse {
+        status: "token-delivered".to_string(),
+        device_id,
+        device_token: None,
+        message: Some("token already delivered".to_string()),
+    }
+}
+
 async fn expire_pending_sessions(state: &AppState) -> Result<(), AppError> {
     let now = now_unix_seconds();
     let updated_at = now_rfc3339();
@@ -682,5 +752,165 @@ mod tests {
         .0;
         assert_eq!(second_status.status, "token-delivered");
         assert!(second_status.device_token.is_none());
+    }
+
+    #[tokio::test]
+    async fn approved_token_claim_is_atomic_for_stale_readers() {
+        let state = test_state().await;
+        let addr: SocketAddr = "127.0.0.1:9877".parse().expect("parse socket addr");
+
+        let start = start_pair(
+            State(state.clone()),
+            ConnectInfo(addr),
+            Json(PairStartRequest {
+                base_url: Some("http://192.168.1.9:8765".to_string()),
+                ttl_seconds: Some(120),
+            }),
+        )
+        .await
+        .expect("pair start should succeed")
+        .0;
+
+        let _ = complete_pair(
+            State(state.clone()),
+            Json(PairCompleteRequest {
+                pair_id: start.pair_id.clone(),
+                pair_secret: start.pair_secret.clone(),
+                device_name: "pixel".to_string(),
+                platform: Some("android".to_string()),
+            }),
+        )
+        .await
+        .expect("pair complete should succeed");
+
+        let _ = pair_decision(
+            State(state.clone()),
+            Json(PairDecisionRequest {
+                pair_id: start.pair_id.clone(),
+                decision: PairDecision::Approve,
+            }),
+        )
+        .await
+        .expect("pair approve should succeed");
+
+        let stale_reader_a = get_pair_session(&state, &start.pair_id)
+            .await
+            .expect("session should exist");
+        let stale_reader_b = get_pair_session(&state, &start.pair_id)
+            .await
+            .expect("session should exist");
+        let token_a = stale_reader_a
+            .issued_token
+            .clone()
+            .expect("approved session should have token");
+        let token_b = stale_reader_b
+            .issued_token
+            .clone()
+            .expect("approved session should have token");
+
+        let first_claim = claim_approved_pair_token(&state, &stale_reader_a.id, &token_a)
+            .await
+            .expect("first claim should run");
+        let second_claim = claim_approved_pair_token(&state, &stale_reader_b.id, &token_b)
+            .await
+            .expect("second claim should run");
+
+        assert!(first_claim, "first stale reader should claim token");
+        assert!(
+            !second_claim,
+            "second stale reader must not claim token again"
+        );
+
+        let final_session = get_pair_session(&state, &start.pair_id)
+            .await
+            .expect("final session should exist");
+        assert_eq!(final_session.status, PAIR_STATUS_TOKEN_DELIVERED);
+        assert!(final_session.issued_token.is_none());
+    }
+
+    #[tokio::test]
+    async fn failed_claim_on_stale_token_retries_latest_instead_of_reporting_delivered() {
+        let state = test_state().await;
+        let addr: SocketAddr = "127.0.0.1:9878".parse().expect("parse socket addr");
+
+        let start = start_pair(
+            State(state.clone()),
+            ConnectInfo(addr),
+            Json(PairStartRequest {
+                base_url: Some("http://192.168.1.10:8765".to_string()),
+                ttl_seconds: Some(120),
+            }),
+        )
+        .await
+        .expect("pair start should succeed")
+        .0;
+
+        let _ = complete_pair(
+            State(state.clone()),
+            Json(PairCompleteRequest {
+                pair_id: start.pair_id.clone(),
+                pair_secret: start.pair_secret.clone(),
+                device_name: "pixel".to_string(),
+                platform: Some("android".to_string()),
+            }),
+        )
+        .await
+        .expect("pair complete should succeed");
+
+        let _ = pair_decision(
+            State(state.clone()),
+            Json(PairDecisionRequest {
+                pair_id: start.pair_id.clone(),
+                decision: PairDecision::Approve,
+            }),
+        )
+        .await
+        .expect("pair approve should succeed");
+
+        let stale = get_pair_session(&state, &start.pair_id)
+            .await
+            .expect("session should exist");
+        let stale_token = stale
+            .issued_token
+            .clone()
+            .expect("approved session should have token");
+        let rotated_token = format!("rotated-{}", Uuid::new_v4());
+        let now = now_rfc3339();
+
+        sqlx::query(
+            r#"
+            UPDATE pair_sessions
+            SET issued_token = ?, updated_at = ?
+            WHERE id = ?
+              AND status = ?
+            "#,
+        )
+        .bind(&rotated_token)
+        .bind(now)
+        .bind(&stale.id)
+        .bind(PAIR_STATUS_APPROVED)
+        .execute(&state.db)
+        .await
+        .expect("token rotation update should succeed");
+
+        let stale_claim = claim_approved_pair_token(&state, &stale.id, &stale_token)
+            .await
+            .expect("stale claim should run");
+        assert!(!stale_claim, "stale token claim must fail");
+
+        let resolved = resolve_failed_approved_claim(&state, &stale.id)
+            .await
+            .expect("failed claim fallback should resolve");
+        assert_eq!(resolved.status, "approved");
+        assert_eq!(
+            resolved.device_token.as_deref(),
+            Some(rotated_token.as_str())
+        );
+
+        let final_session = get_pair_session(&state, &start.pair_id)
+            .await
+            .expect("final session should exist");
+        assert_eq!(final_session.status, PAIR_STATUS_TOKEN_DELIVERED);
+        assert!(final_session.issued_token.is_none());
     }
 }

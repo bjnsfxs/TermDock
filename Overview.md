@@ -297,6 +297,22 @@
   - `pnpm -C web test` passed (`20 passed, 0 failed`).
   - `pnpm -C web build` passed.
   - `pnpm -C client build` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
+- Fixed post-review correctness issues in daemon lifecycle and pairing token handoff:
+  - `client/src-tauri/src/lib.rs`: `daemon_start_impl` now stops any still-running managed daemon child before spawning/replacing the managed handle, preventing orphaned managed daemons when health check is stale/mismatched.
+  - `daemon/src/routes/pairing.rs`: `pair_status` approved-token delivery now uses an atomic conditional update (`id + status=approved + issued_token`), so concurrent pollers cannot receive the same one-time token twice.
+  - `daemon/src/routes/pairing.rs`: added helper `claim_approved_pair_token` and stale-reader test coverage to enforce single-claim semantics.
+- Verification rerun after post-review fixes:
+  - `cargo fmt --manifest-path daemon/Cargo.toml` passed.
+  - `cargo fmt --manifest-path client/src-tauri/Cargo.toml` passed.
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (`15 passed, 0 failed`).
+  - `cargo check --manifest-path client/src-tauri/Cargo.toml` passed.
+- Fixed follow-up review issue in pairing fallback status semantics:
+  - `daemon/src/routes/pairing.rs`: when initial approved-token claim fails, fallback no longer maps `status=approved` to `token-delivered`.
+  - Added `resolve_failed_approved_claim` to re-read latest session, retry atomic claim with latest token, and return retryable `pending-approval` (instead of false terminal) when state is still settling.
+  - Added shared `token_delivered_response` constructor to keep delivered-state response semantics consistent.
+- Verification rerun after follow-up pairing fallback fix:
+  - `cargo fmt --manifest-path daemon/Cargo.toml` passed.
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (`16 passed, 0 failed`).
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
@@ -352,6 +368,8 @@
   - `daemon/src/routes/output.rs`: output tail returns not found for missing IDs,
   - `daemon/src/routes/settings.rs`: rejects invalid bind address and accepts valid bind+port updates,
   - `daemon/src/routes/pairing.rs`: pair roundtrip approve flow delivers device token exactly once.
+  - `daemon/src/routes/pairing.rs`: approved-token claim remains single-use even when two stale readers attempt to claim the same token.
+  - `daemon/src/routes/pairing.rs`: stale-token claim fallback retries latest approved token instead of returning false `token-delivered`.
 - `daemon/src/main.rs` route test:
   - verifies `/` and deep-link SPA route serve `index.html`,
   - verifies `/health` remains reachable,
