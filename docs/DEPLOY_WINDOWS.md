@@ -75,3 +75,18 @@ Important:
 - Desktop wrapper does **not** manage daemon lifecycle in M8.
 - Start daemon separately (for example with `scripts\start-daemon.ps1`) before using desktop app.
 - In desktop protocol context, default daemon base URL falls back to `http://127.0.0.1:8765`.
+
+## 7. Download artifacts from GitHub Actions (M9)
+
+Main branch pushes and manual workflow runs can publish two artifacts:
+
+- `ai-cli-manager-win-x64`: portable daemon+web zip package.
+- `ai-cli-manager-client-win-x64`: desktop wrapper local build output.
+
+Download flow:
+
+1. Open the repository `Actions` tab.
+2. Select workflow `Build Artifacts`.
+3. Open a successful run on branch `main` (or a manual `workflow_dispatch` run).
+4. Download artifact `ai-cli-manager-win-x64`, then extract and follow sections 1-5.
+5. Optionally download `ai-cli-manager-client-win-x64` for desktop wrapper distribution/testing.

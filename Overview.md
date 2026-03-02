@@ -102,8 +102,21 @@
     - protocol-aware router selection (`BrowserRouter` for `http/https`, `HashRouter` otherwise),
     - default API base URL fallback to `http://127.0.0.1:8765` in non-HTTP protocol contexts.
   - Expanded docs for desktop connect-only behavior (`README.md`, `client/README.md`, `docs/DEPLOY_WINDOWS.md`).
+- M9: completed in this session (`repo + docs + automation`):
+  - Added GitHub Actions CI baseline:
+    - `.github/workflows/ci.yml` with required checks `daemon-test`, `web-test-build`, and `desktop-build`,
+    - triggers on `pull_request` and `push` to `main`.
+  - Added artifact workflow:
+    - `.github/workflows/artifacts.yml` with `portable-artifact` and `desktop-artifact`,
+    - uploads `ai-cli-manager-win-x64` and `ai-cli-manager-client-win-x64`,
+    - triggers on `push` to `main` and `workflow_dispatch`.
+  - Added root CI scripts in `package.json`:
+    - `ci:daemon`, `ci:web`, `ci:desktop`, `ci:portable`.
+  - Updated delivery docs:
+    - `README.md` now documents CI checks/artifact workflows and required-check recommendation,
+    - `docs/DEPLOY_WINDOWS.md` now documents downloading build artifacts from GitHub Actions.
 
-## Environment & Build Status (2026-03-01)
+## Environment & Build Status (2026-03-02)
 - Dependency isolation baseline remains workspace-local (`pnpm` lockfile in repo root; no global installs).
 - Verification completed after M6 changes:
   - `cargo fmt --manifest-path daemon/Cargo.toml` passed.
@@ -121,8 +134,16 @@
   - `pnpm -C web build` passed.
   - `pnpm -C client build` passed (`tauri build --no-bundle`) and produced:
     - `client/src-tauri/target/release/ai-cli-manager-client.exe`
+- Verification completed after M9 CI baseline implementation:
+  - `pnpm ci:daemon` passed (`13` passed, `0` failed).
+  - `pnpm ci:web` passed (`4` files, `20` tests) and production build completed.
+  - `pnpm ci:desktop` passed and produced:
+    - `client/src-tauri/target/release/ai-cli-manager-client.exe`
+  - `pnpm ci:portable` passed and produced:
+    - `artifacts/ai-cli-manager-win-x64/`
+    - `artifacts/ai-cli-manager-win-x64.zip`
 
-## Session Log (2026-03-01)
+## Session Log (2026-03-02)
 - Implemented M4 backend event + metrics pipeline.
 - Implemented M4 dashboard events-first refresh and fallback polling behavior.
 - Implemented M5 auth/LAN hardening and settings/pairing UX:
@@ -224,6 +245,16 @@
 - Verification rerun after desktop URL fix:
   - `pnpm -C web test` passed (`20 passed, 0 failed`).
   - `pnpm -C web build` passed.
+- Implemented M9 CI/CD baseline:
+  - added `.github/workflows/ci.yml` (PR + main checks for daemon/web/desktop),
+  - added `.github/workflows/artifacts.yml` (main/manual artifact upload for portable + desktop outputs),
+  - added root `ci:*` scripts in `package.json`,
+  - updated `README.md` and `docs/DEPLOY_WINDOWS.md` with CI/artifact usage guidance.
+- Verification rerun after M9 implementation:
+  - `pnpm ci:daemon` passed (`13 passed, 0 failed`) with existing dead-code warning in `daemon/src/config.rs`.
+  - `pnpm ci:web` passed (`20 passed, 0 failed`) and build passed.
+  - `pnpm ci:desktop` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
+  - `pnpm ci:portable` passed and refreshed portable outputs under `artifacts/`.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
@@ -285,7 +316,7 @@
 ## Known Gaps / TODO
 - `packages/api-client` schema generation + typed fetch wrapper still not implemented.
 - Portable release is zip-only (no MSI/NSIS installer yet).
-- Release automation is local-script only (no CI artifacts/release pipeline yet).
+- CI baseline now covers PR checks and `main` artifact uploads, but automated GitHub Release publication is not implemented yet.
 - Dashboard metrics now include unit formatting and bars, but still lack trend/sparkline and host-normalized scale.
 - No dedicated integration test for `/ws/v1/events` network path yet (unit tests cover process event emission).
 - No dedicated integration test yet for loopback-only settings update behavior.
@@ -293,7 +324,7 @@
 - Desktop wrapper is connect-only in M8 (does not manage daemon lifecycle or background service).
 
 ## Next Recommended Step
-- M9: add CI pipeline for daemon/web/client verification and artifact publication:
-  - run `cargo test` (daemon), `pnpm -C web test/build`, and `pnpm -C client build` on Windows runners,
-  - archive portable daemon/web artifact and desktop local build outputs,
-  - enforce PR checks before merge.
+- M10: implement `packages/api-client` OpenAPI generation + typed fetch wrapper:
+  - generate and publish shared TS API types from `openapi.yaml`,
+  - replace remaining hand-written request/response typing in `web/`,
+  - add CI check ensuring generated client stays in sync with schema.

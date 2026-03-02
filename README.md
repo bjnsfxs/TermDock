@@ -72,6 +72,26 @@ Notes:
 - The desktop client is connect-only in M8 (it does not start/stop daemon automatically).
 - Default daemon URL in desktop protocol context falls back to `http://127.0.0.1:8765`.
 
+## CI/CD (M9 baseline)
+
+GitHub Actions workflows:
+
+- `.github/workflows/ci.yml`
+  - Triggers on `pull_request` and `push` to `main`.
+  - Runs required checks:
+    - `daemon-test`
+    - `web-test-build`
+    - `desktop-build`
+- `.github/workflows/artifacts.yml`
+  - Triggers on `push` to `main` and `workflow_dispatch`.
+  - Uploads build artifacts:
+    - `ai-cli-manager-win-x64` (portable zip)
+    - `ai-cli-manager-client-win-x64` (desktop local build output)
+
+Recommended repository setting:
+
+- Configure branch protection on `main` and mark the three checks above as required before merge.
+
 ## Windows deployment and troubleshooting
 
 See:
