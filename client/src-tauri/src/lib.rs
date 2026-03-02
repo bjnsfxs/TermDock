@@ -406,9 +406,24 @@ fn merge_endpoint_snapshot(
     pre_start: DaemonEndpoint,
     post_start: DaemonEndpoint,
 ) -> DaemonEndpoint {
+    let DaemonEndpoint {
+        base_url: pre_base_url,
+        token: pre_token,
+    } = pre_start;
+    let DaemonEndpoint {
+        base_url: post_base_url,
+        token: post_token,
+    } = post_start;
+
+    let has_post_start_snapshot = !(post_token.is_none() && post_base_url == FALLBACK_BASE_URL);
+
     DaemonEndpoint {
-        base_url: post_start.base_url,
-        token: post_start.token.or(pre_start.token),
+        base_url: if has_post_start_snapshot {
+            post_base_url
+        } else {
+            pre_base_url
+        },
+        token: post_token.or(pre_token),
     }
 }
 
@@ -515,7 +530,7 @@ fn find_workspace_root(start: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{merge_endpoint_snapshot, DaemonEndpoint};
+    use super::{merge_endpoint_snapshot, DaemonEndpoint, FALLBACK_BASE_URL};
 
     #[test]
     fn merge_endpoint_snapshot_prefers_post_start_token() {
@@ -536,15 +551,16 @@ mod tests {
     #[test]
     fn merge_endpoint_snapshot_keeps_pre_start_token_as_fallback() {
         let pre_start = DaemonEndpoint {
-            base_url: "http://127.0.0.1:8765".to_string(),
+            base_url: "http://10.0.0.8:9100".to_string(),
             token: Some("existing-token".to_string()),
         };
         let post_start = DaemonEndpoint {
-            base_url: "http://127.0.0.1:8765".to_string(),
+            base_url: FALLBACK_BASE_URL.to_string(),
             token: None,
         };
 
         let merged = merge_endpoint_snapshot(pre_start, post_start);
+        assert_eq!(merged.base_url, "http://10.0.0.8:9100");
         assert_eq!(merged.token.as_deref(), Some("existing-token"));
     }
 

@@ -351,6 +351,15 @@
   - `cargo fmt --manifest-path client/src-tauri/Cargo.toml` passed.
   - `cargo test --manifest-path client/src-tauri/Cargo.toml` passed (`3 passed, 0 failed`).
   - `cargo check --manifest-path client/src-tauri/Cargo.toml` passed.
+- Fixed follow-up desktop endpoint merge regression from review:
+  - `client/src-tauri/src/lib.rs`:
+    - `merge_endpoint_snapshot` now treats `fallback base URL + empty token` as an unavailable post-start snapshot,
+    - preserves pre-start verified `base_url` in that case while still preferring post-start token when present.
+  - updated unit coverage to assert pre-start base URL is retained when post-start refresh falls back.
+- Verification rerun after endpoint fallback fix:
+  - `cargo fmt --manifest-path client/src-tauri/Cargo.toml` passed.
+  - `cargo test --manifest-path client/src-tauri/Cargo.toml` passed (`3 passed, 0 failed`).
+  - `cargo check --manifest-path client/src-tauri/Cargo.toml` passed.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
