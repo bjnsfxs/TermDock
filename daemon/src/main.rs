@@ -82,10 +82,14 @@ async fn main() -> Result<(), crate::error::AppError> {
         .await
         .map_err(|e| crate::error::AppError::internal(format!("bind failed: {e}")))?;
 
+    let mut shutdown_rx = state.subscribe_shutdown();
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(async move {
+        let _ = shutdown_rx.changed().await;
+    })
     .await
     .map_err(|e| crate::error::AppError::internal(format!("server error: {e}")))?;
 

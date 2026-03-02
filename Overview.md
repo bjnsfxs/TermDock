@@ -115,6 +115,25 @@
   - Updated delivery docs:
     - `README.md` now documents CI checks/artifact workflows and required-check recommendation,
     - `docs/DEPLOY_WINDOWS.md` now documents downloading build artifacts from GitHub Actions.
+- M10: completed in this session (`daemon + client + web + docs`):
+  - Implemented pairing and device-token auth backend:
+    - added SQLite migration `0002_auth_pairing.sql` (`auth_devices`, `pair_sessions`),
+    - added pairing endpoints (`pair/start`, `pair/complete`, `pair/status`, `pair/pending`, `pair/decision`),
+    - added trusted-device management endpoints (`GET /auth/devices`, `DELETE /auth/devices/{id}`),
+    - upgraded auth middleware to support `master` + `device` token validation for REST/WS scopes.
+  - Added daemon lifecycle endpoint:
+    - `POST /api/v1/system/shutdown` (master + loopback).
+  - Added graceful shutdown pipeline in daemon runtime:
+    - state-level shutdown channel and `axum::serve(...).with_graceful_shutdown(...)`.
+  - Upgraded desktop wrapper from connect-only to daemon-managed:
+    - added Tauri commands: `daemon_status`, `daemon_start`, `daemon_stop`, `daemon_restart`, `daemon_bootstrap`,
+    - implemented daemon process resolution/spawn/health polling/stop flow in `client/src-tauri`,
+    - desktop app now triggers daemon bootstrap from web app startup.
+  - Upgraded settings UX for new architecture:
+    - profile-based connection storage (`daemonProfilesV2` + active profile),
+    - desktop daemon control panel (bootstrap/start/stop/restart),
+    - one-time pairing QR generation + pending approval actions + trusted device revoke controls.
+  - Updated docs (`README.md`, `docs/API.md`, `docs/SECURITY.md`, `docs/DEPLOY_WINDOWS.md`) for M10 behavior.
 
 ## Environment & Build Status (2026-03-02)
 - Dependency isolation baseline remains workspace-local (`pnpm` lockfile in repo root; no global installs).
@@ -142,6 +161,12 @@
   - `pnpm ci:portable` passed and produced:
     - `artifacts/ai-cli-manager-win-x64/`
     - `artifacts/ai-cli-manager-win-x64.zip`
+- Verification completed after M10 implementation:
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (`14` passed, `0` failed).
+  - `pnpm -C web test` passed (`4` files, `20` tests).
+  - `pnpm -C web build` passed.
+  - `pnpm -C client build` passed and produced:
+    - `client/src-tauri/target/release/ai-cli-manager-client.exe`
 
 ## Session Log (2026-03-02)
 - Implemented M4 backend event + metrics pipeline.
@@ -255,6 +280,23 @@
   - `pnpm ci:web` passed (`20 passed, 0 failed`) and build passed.
   - `pnpm ci:desktop` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
   - `pnpm ci:portable` passed and refreshed portable outputs under `artifacts/`.
+- Implemented M10 daemon-managed desktop + pairing approval architecture:
+  - daemon:
+    - added `auth_devices` + `pair_sessions` migration and route handlers under `daemon/src/routes/pairing.rs`,
+    - added token-scope auth middleware updates in `daemon/src/auth.rs`,
+    - added `/api/v1/system/shutdown` route and graceful shutdown wiring.
+  - desktop wrapper (`client/src-tauri`):
+    - added daemon supervisor + Tauri commands for lifecycle management,
+    - desktop startup now calls bootstrap command from `web/src/App.tsx`.
+  - web settings:
+    - added profile management, daemon control actions, pair-session QR creation, approval queue, and trusted-device revoke list.
+  - docs refresh:
+    - updated desktop/runtime/pairing guidance in `README.md`, `docs/API.md`, `docs/SECURITY.md`, `docs/DEPLOY_WINDOWS.md`.
+- Verification rerun after M10 implementation:
+  - `cargo test --manifest-path daemon/Cargo.toml` passed (`14 passed, 0 failed`).
+  - `pnpm -C web test` passed (`20 passed, 0 failed`).
+  - `pnpm -C web build` passed.
+  - `pnpm -C client build` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:
@@ -290,8 +332,9 @@
   - daemon serves packaged web assets from `AICLI_WEB_DIR` (or `<daemon_exe_dir>/web` by default),
   - unknown non-API/non-WS routes fall back to `index.html` for SPA routing.
 - Security/settings behavior:
-  - `/api/v1/*` requires bearer token via REST header middleware.
-  - `/ws/v1/*` requires bearer token via header or query-token fallback middleware.
+  - REST auth supports `master` token and approved `device` tokens for runtime endpoints.
+  - Privileged REST routes (`settings`, `system`, `pairing admin`, `device admin`) require `master` token.
+  - `/ws/v1/*` accepts `master` or active `device` token via header or query-token fallback middleware.
   - `/api/v1/settings` allows `bind_address` mutation only from loopback client addresses and validates `bind_address:port` parseability before persisting.
 
 ## Testing Added
@@ -307,7 +350,8 @@
   - `daemon/src/routes/instances.rs`: `stop_instance` returns not found for missing IDs,
   - `daemon/src/routes/instances.rs`: `stop_instance` still stops orphan runtimes even when returning not found,
   - `daemon/src/routes/output.rs`: output tail returns not found for missing IDs,
-  - `daemon/src/routes/settings.rs`: rejects invalid bind address and accepts valid bind+port updates.
+  - `daemon/src/routes/settings.rs`: rejects invalid bind address and accepts valid bind+port updates,
+  - `daemon/src/routes/pairing.rs`: pair roundtrip approve flow delivers device token exactly once.
 - `daemon/src/main.rs` route test:
   - verifies `/` and deep-link SPA route serve `index.html`,
   - verifies `/health` remains reachable,
@@ -320,11 +364,11 @@
 - Dashboard metrics now include unit formatting and bars, but still lack trend/sparkline and host-normalized scale.
 - No dedicated integration test for `/ws/v1/events` network path yet (unit tests cover process event emission).
 - No dedicated integration test yet for loopback-only settings update behavior.
-- Pairing approval flow endpoint (`/api/v1/auth/pair`) is still not implemented (current pairing is token + address QR).
-- Desktop wrapper is connect-only in M8 (does not manage daemon lifecycle or background service).
+- OpenAPI schema (`openapi.yaml`) has not been fully expanded yet for new M10 pairing/device/system endpoints.
+- Native Android package is not shipped yet (current mobile path is still web/PWA + pairing URI flow).
 
 ## Next Recommended Step
-- M10: implement `packages/api-client` OpenAPI generation + typed fetch wrapper:
-  - generate and publish shared TS API types from `openapi.yaml`,
-  - replace remaining hand-written request/response typing in `web/`,
-  - add CI check ensuring generated client stays in sync with schema.
+- M11: ship Android-first native wrapper and finalize mobile pairing UX:
+  - package current web UI into Android target,
+  - implement QR scanner + manual fallback input on-device,
+  - validate full pairing-approval -> device-token -> dashboard/terminal flow on real LAN.

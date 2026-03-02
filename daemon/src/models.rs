@@ -194,6 +194,99 @@ pub struct TokenRotateResponse {
     pub token: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PairStartRequest {
+    pub base_url: Option<String>,
+    pub ttl_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairStartResponse {
+    pub pair_id: String,
+    pub pair_secret: String,
+    pub pair_uri: String,
+    pub expires_at_epoch: i64,
+    pub expires_in_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairCompleteRequest {
+    pub pair_id: String,
+    pub pair_secret: String,
+    pub device_name: String,
+    pub platform: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairCompleteResponse {
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairStatusResponse {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingPairSession {
+    pub pair_id: String,
+    pub requested_name: Option<String>,
+    pub platform: Option<String>,
+    pub created_at: String,
+    pub expires_at_epoch: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingPairSessionsResponse {
+    pub sessions: Vec<PendingPairSession>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PairDecision {
+    Approve,
+    Reject,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairDecisionRequest {
+    pub pair_id: String,
+    pub decision: PairDecision,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairDecisionResponse {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthDevice {
+    pub id: String,
+    pub name: String,
+    pub platform: Option<String>,
+    pub created_at: String,
+    pub last_seen_at: String,
+    pub revoked_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthDeviceListResponse {
+    pub devices: Vec<AuthDevice>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShutdownResponse {
+    pub status: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstanceConfig {
     pub mode: ConfigMode,
@@ -233,6 +326,10 @@ pub fn now_rfc3339() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+}
+
+pub fn now_unix_seconds() -> i64 {
+    OffsetDateTime::now_utc().unix_timestamp()
 }
 
 /// DB row mapping (internal)

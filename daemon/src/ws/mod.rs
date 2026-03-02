@@ -12,6 +12,6 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Protect all WS endpoints (header OR ?token= query)
         .layer(middleware::from_fn_with_state(
             state,
-            auth::require_bearer_header_or_query,
+            auth::require_ws_bearer_header_or_query,
         ))
 }

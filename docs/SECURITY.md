@@ -4,13 +4,16 @@
 
 - Daemon default bind: `127.0.0.1:8765` (not LAN-exposed by default).
 - Daemon can host bundled web UI from `AICLI_WEB_DIR` (default: `<daemon_exe_dir>/web`).
-- All `/api/v1/*` require `Authorization: Bearer <token>`.
-- All `/ws/v1/*` require bearer auth:
+- All `/api/v1/*` require bearer auth (`master` token or approved `device` token).
+- Privileged REST endpoints (`/api/v1/settings`, `/api/v1/system/*`, `/api/v1/auth/pair/start`, `/api/v1/auth/pair/pending`, `/api/v1/auth/pair/decision`, `/api/v1/auth/devices*`) require `master` token.
+- All `/ws/v1/*` require bearer auth (`master` or approved `device` token):
   - native/non-browser clients: `Authorization: Bearer <token>`.
   - browser clients: `?token=<token>` query fallback.
 - Token is generated on first run and persisted in daemon config (`daemon.json` in data dir).
 - Token rotation endpoint (`POST /api/v1/auth/token/rotate`) invalidates old token immediately.
 - `PUT /api/v1/settings` can only change `bind_address` from loopback clients.
+- Pairing now uses one-time pair sessions (`pair_id + pair_secret`) and explicit desktop approval before issuing a device token.
+- Device tokens can be revoked from Settings (`/api/v1/auth/devices/{id}`).
 
 ## LAN access guidance
 
@@ -34,7 +37,7 @@ Before enabling LAN:
 
 - Token at rest is plain text in config file (OS ACL protected, not encrypted).
 - CORS is permissive (`*`) for MVP browser connectivity.
-- No first-class pairing approval workflow yet (QR currently carries address + token payload).
+- Pair session delivery token is returned once by status poll; callers should persist securely on client side.
 
 ## TLS roadmap (post-MVP)
 

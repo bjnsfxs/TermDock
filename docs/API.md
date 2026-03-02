@@ -20,6 +20,11 @@ Bundled web UI hosting:
 Auth:
 
 - `Authorization: Bearer <token>`
+- Accepted token kinds:
+  - `master` token (from daemon config / settings)
+  - `device` token (issued through pair approval flow)
+- Privileged endpoints (`settings`, `system shutdown`, pairing/admin endpoints) require `master` token.
+- Runtime control endpoints (`instances`, `output`, WS terminal/events) accept both `master` and active `device` tokens.
 
 `/health` is public.
 
@@ -31,6 +36,20 @@ Settings and token management:
 - Updating `bind_address` is only allowed when the request comes from a loopback client (`127.0.0.1` / `::1`).
 - `PUT /api/v1/settings` validates `bind_address` + `port` as a parseable socket address and returns `400` when invalid.
 - Changing `bind_address`/`port` requires daemon restart to take effect.
+
+Pairing and device trust management:
+
+- `POST /api/v1/auth/pair/start` (master + loopback): create one-time pair session and return pair URI.
+- `POST /api/v1/auth/pair/complete` (public): mobile/client submits `pair_id + pair_secret + device_name`.
+- `GET /api/v1/auth/pair/status/{pair_id}?secret=...` (public): poll pair result; approved flow returns device token once.
+- `GET /api/v1/auth/pair/pending` (master): list pending approval requests.
+- `POST /api/v1/auth/pair/decision` (master): approve/reject pending request.
+- `GET /api/v1/auth/devices` (master): list trusted devices.
+- `DELETE /api/v1/auth/devices/{device_id}` (master): revoke trusted device token.
+
+System lifecycle:
+
+- `POST /api/v1/system/shutdown` (master + loopback): graceful daemon shutdown trigger.
 
 ## WebSocket
 
@@ -48,7 +67,7 @@ Handshake:
   1) `?token=<token>` query parameter (**recommended for MVP**), or
   2) token via `Sec-WebSocket-Protocol` subprotocol trick.
 
-This skeleton uses `?token=<token>`.
+This implementation supports `?token=<token>` and validates against master/device tokens.
 
 Frame types:
 

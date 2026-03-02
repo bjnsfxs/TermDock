@@ -1,4 +1,4 @@
-use crate::{error::AppError, state::AppState};
+use crate::{error::AppError, models::now_rfc3339, state::AppState};
 use axum::{
     body::Body,
     extract::State,
@@ -6,48 +6,130 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use sha2::{Digest, Sha256};
 
-/// REST auth: require `Authorization: Bearer <token>`.
-pub async fn require_bearer_header(
+#[derive(Debug, Clone)]
+pub enum AuthPrincipal {
+    Master,
+    Device { device_id: String },
+}
+
+/// REST auth for regular APIs:
+/// - requires Authorization header
+/// - accepts master token OR active device token
+pub async fn require_api_bearer_header(
     State(state): State<AppState>,
-    req: Request<Body>,
+    mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, AppError> {
     let token = token_from_authorization(req.headers().get(header::AUTHORIZATION))?;
-    let expected = state.config_read().token;
-    if token != expected {
-        return Err(AppError::Unauthorized);
-    }
+    let principal = principal_from_token(&state, &token, true).await?;
+    req.extensions_mut().insert(principal);
     Ok(next.run(req).await)
 }
 
-/// WebSocket auth:
-/// - Prefer `Authorization: Bearer <token>`
-/// - Fallback to query param `?token=<token>` for browser clients (WebSocket API cannot set headers).
-pub async fn require_bearer_header_or_query(
+/// REST auth for privileged APIs:
+/// - requires Authorization header
+/// - accepts master token only
+pub async fn require_master_bearer_header(
     State(state): State<AppState>,
-    req: Request<Body>,
+    mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, AppError> {
-    let expected = state.config_read().token;
-
-    if let Some(h) = req.headers().get(header::AUTHORIZATION) {
-        let token = token_from_authorization(Some(h))?;
-        if token != expected {
-            return Err(AppError::Unauthorized);
+    let token = token_from_authorization(req.headers().get(header::AUTHORIZATION))?;
+    let principal = principal_from_token(&state, &token, false).await?;
+    match principal {
+        AuthPrincipal::Master => {
+            req.extensions_mut().insert(AuthPrincipal::Master);
+            Ok(next.run(req).await)
         }
-        return Ok(next.run(req).await);
+        AuthPrincipal::Device { .. } => Err(AppError::Unauthorized),
+    }
+}
+
+/// WS auth:
+/// - Prefer `Authorization: Bearer <token>`
+/// - Browser fallback `?token=<token>`
+/// - accepts master token OR active device token
+pub async fn require_ws_bearer_header_or_query(
+    State(state): State<AppState>,
+    mut req: Request<Body>,
+    next: Next,
+) -> Result<Response, AppError> {
+    let token = if let Some(h) = req.headers().get(header::AUTHORIZATION) {
+        token_from_authorization(Some(h))?
+    } else {
+        token_from_query(req.uri().query()).ok_or(AppError::Unauthorized)?
+    };
+
+    let principal = principal_from_token(&state, &token, true).await?;
+    req.extensions_mut().insert(principal);
+    Ok(next.run(req).await)
+}
+
+pub fn token_hash(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        out.push(hex_digit((b >> 4) & 0x0f));
+        out.push(hex_digit(b & 0x0f));
+    }
+    out
+}
+
+fn hex_digit(v: u8) -> char {
+    match v {
+        0..=9 => (b'0' + v) as char,
+        10..=15 => (b'a' + (v - 10)) as char,
+        _ => '0',
+    }
+}
+
+async fn principal_from_token(
+    state: &AppState,
+    token: &str,
+    update_device_last_seen: bool,
+) -> Result<AuthPrincipal, AppError> {
+    let cfg = state.config_read();
+    if token == cfg.token {
+        return Ok(AuthPrincipal::Master);
     }
 
-    // Fallback: query token
-    let Some(token) = token_from_query(req.uri().query()) else {
+    let hashed = token_hash(token);
+    let device_id: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT id
+        FROM auth_devices
+        WHERE token_hash = ?
+          AND revoked_at IS NULL
+        LIMIT 1
+        "#,
+    )
+    .bind(hashed)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let Some(device_id) = device_id else {
         return Err(AppError::Unauthorized);
     };
-    if token != expected {
-        return Err(AppError::Unauthorized);
+
+    if update_device_last_seen {
+        let _ = sqlx::query(
+            r#"
+            UPDATE auth_devices
+            SET last_seen_at = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(now_rfc3339())
+        .bind(device_id.clone())
+        .execute(&state.db)
+        .await;
     }
 
-    Ok(next.run(req).await)
+    Ok(AuthPrincipal::Device { device_id })
 }
 
 fn token_from_authorization(

@@ -17,10 +17,12 @@ Windows host daemon for managing multiple AI CLI instances, plus a React PWA fro
 2. Start web dev server (optional, if not using daemon-hosted static):
    - `pnpm -C web dev`
 
-Desktop wrapper dev (requires daemon running separately):
+Desktop wrapper dev:
 
 3. Start desktop app:
    - `pnpm dev:desktop`
+
+In dev mode the desktop wrapper attempts daemon bootstrap automatically. If daemon binary is not available yet, start daemon manually once (`cargo run --manifest-path daemon/Cargo.toml`) or build it first.
 
 Default daemon bind is `127.0.0.1:8765`.
 
@@ -69,7 +71,9 @@ pnpm build:desktop
 
 Notes:
 
-- The desktop client is connect-only in M8 (it does not start/stop daemon automatically).
+- The desktop client now bootstraps daemon on startup (M10) when daemon binary can be resolved.
+- Desktop exposes daemon lifecycle controls (bootstrap/start/stop/restart) in Settings.
+- Current exit policy is "desktop close -> stop managed daemon".
 - Default daemon URL in desktop protocol context falls back to `http://127.0.0.1:8765`.
 
 ## CI/CD (M9 baseline)

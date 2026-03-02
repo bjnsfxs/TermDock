@@ -60,6 +60,20 @@ export type RotateTokenResponse = {
   token: string;
 };
 
+export type ApiConfig = {
+  baseUrl: string;
+  token: string;
+};
+
+export type DaemonProfile = {
+  id: string;
+  label: string;
+  baseUrl: string;
+  token: string;
+  deviceId?: string | null;
+  lastSeenAt?: string | null;
+};
+
 export type UpdateSettingsRequest = {
   bind_address?: string;
   port?: number;
@@ -79,6 +93,86 @@ export type CreateOrUpdateInstanceRequest = {
   config_content: string | null;
   restart_policy: RestartPolicy;
   auto_start: boolean;
+};
+
+export type PairStartRequest = {
+  base_url?: string;
+  ttl_seconds?: number;
+};
+
+export type PairStartResponse = {
+  pair_id: string;
+  pair_secret: string;
+  pair_uri: string;
+  expires_at_epoch: number;
+  expires_in_seconds: number;
+};
+
+export type PairCompleteRequest = {
+  pair_id: string;
+  pair_secret: string;
+  device_name: string;
+  platform?: string;
+};
+
+export type PairCompleteResponse = {
+  status: string;
+};
+
+export type PairStatusResponse = {
+  status: string;
+  device_id?: string;
+  device_token?: string;
+  message?: string;
+};
+
+export type PendingPairSession = {
+  pair_id: string;
+  requested_name?: string;
+  platform?: string;
+  created_at: string;
+  expires_at_epoch: number;
+};
+
+export type PendingPairSessionsResponse = {
+  sessions: PendingPairSession[];
+};
+
+export type PairDecision = "approve" | "reject";
+
+export type PairDecisionRequest = {
+  pair_id: string;
+  decision: PairDecision;
+};
+
+export type PairDecisionResponse = {
+  status: string;
+  device_id?: string;
+};
+
+export type AuthDevice = {
+  id: string;
+  name: string;
+  platform?: string;
+  created_at: string;
+  last_seen_at: string;
+  revoked_at?: string | null;
+};
+
+export type AuthDeviceListResponse = {
+  devices: AuthDevice[];
+};
+
+export type DaemonStatus = {
+  reachable: boolean;
+  managed: boolean;
+  pid: number | null;
+  baseUrl: string;
+  message?: string | null;
+};
+
+export type DaemonActionResponse = {
+  status: DaemonStatus;
 };
 
 export type EventsHelloMessage = {

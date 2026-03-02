@@ -36,6 +36,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "sysinfo",
  "thiserror 1.0.69",

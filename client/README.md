@@ -7,7 +7,8 @@ This package is a desktop wrapper around the shared React UI in `../web`.
 - Single UI source: all routes and pages live in `web/`.
 - Tauri dev mode loads `http://127.0.0.1:5173` (started automatically).
 - Tauri build mode compiles `web/dist` and embeds those static assets.
-- Daemon lifecycle is out of scope here: desktop client connects to an already-running daemon.
+- Desktop wrapper includes daemon supervisor commands (bootstrap/start/stop/restart).
+- Current lifecycle policy: closing desktop app stops daemon process managed by the wrapper.
 
 ## Commands
 

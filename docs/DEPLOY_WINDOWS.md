@@ -63,7 +63,7 @@ Security notes:
   - Open Task Scheduler and inspect `AI CLI Manager Daemon` history.
   - Reinstall task with `.\remove-autostart.ps1` then `.\install-autostart.ps1`.
 
-## 6. Desktop wrapper (M8, connect-only)
+## 6. Desktop wrapper (M10, daemon-managed)
 
 The Tauri desktop app is now available under `client/` and reuses the same web UI.
 
@@ -72,8 +72,9 @@ The Tauri desktop app is now available under `client/` and reuses the same web U
 
 Important:
 
-- Desktop wrapper does **not** manage daemon lifecycle in M8.
-- Start daemon separately (for example with `scripts\start-daemon.ps1`) before using desktop app.
+- Desktop wrapper can bootstrap daemon on startup when daemon binary is available.
+- Settings page includes daemon lifecycle controls (bootstrap/start/stop/restart).
+- Desktop close currently stops the daemon process started/managed by the wrapper.
 - In desktop protocol context, default daemon base URL falls back to `http://127.0.0.1:8765`.
 
 ## 7. Download artifacts from GitHub Actions (M9)
