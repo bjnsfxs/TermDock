@@ -168,6 +168,7 @@ export type DaemonStatus = {
   managed: boolean;
   pid: number | null;
   baseUrl: string;
+  authToken?: string | null;
   message?: string | null;
 };
 

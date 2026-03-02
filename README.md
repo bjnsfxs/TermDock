@@ -72,7 +72,9 @@ pnpm build:desktop
 Notes:
 
 - The desktop client now bootstraps daemon on startup (M10) when daemon binary can be resolved.
+- Desktop startup now syncs local daemon endpoint + token into a dedicated local profile for immediate API access.
 - Desktop exposes daemon lifecycle controls (bootstrap/start/stop/restart) in Settings.
+- Desktop-managed daemon launch on Windows runs without opening a separate terminal window.
 - Current exit policy is "desktop close -> stop managed daemon".
 - Default daemon URL in desktop protocol context falls back to `http://127.0.0.1:8765`.
 

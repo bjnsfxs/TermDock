@@ -6,11 +6,16 @@ use std::{
     sync::Mutex,
     time::Duration,
 };
+use tauri::Manager;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 const FALLBACK_BASE_URL: &str = "http://127.0.0.1:8765";
 const START_TIMEOUT: Duration = Duration::from_secs(30);
 const STOP_TIMEOUT: Duration = Duration::from_secs(8);
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Clone, Deserialize)]
 struct DaemonConfigFile {
@@ -33,7 +38,7 @@ impl Drop for DaemonSupervisor {
     fn drop(&mut self) {
         if let Ok(slot) = self.managed.get_mut() {
             if let Some(managed) = slot.as_mut() {
-                let _ = managed.child.kill();
+                let _ = terminate_child_process(&mut managed.child);
             }
         }
     }
@@ -46,6 +51,7 @@ struct DaemonStatus {
     managed: bool,
     pid: Option<u32>,
     base_url: String,
+    auth_token: Option<String>,
     message: Option<String>,
 }
 
@@ -60,6 +66,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(DaemonSupervisor::default())
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                let supervisor = window.state::<DaemonSupervisor>();
+                let _ = terminate_managed_child(&supervisor);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             daemon_status,
             daemon_start,
@@ -117,6 +129,7 @@ async fn daemon_status_impl(supervisor: &DaemonSupervisor) -> Result<DaemonStatu
         managed,
         pid,
         base_url: endpoint.base_url,
+        auth_token: endpoint.token,
         message: None,
     })
 }
@@ -135,12 +148,14 @@ async fn daemon_start_impl(supervisor: &DaemonSupervisor) -> Result<DaemonAction
     cleanup_dead_child(supervisor)?;
     let endpoint = daemon_endpoint();
     if health_ok(&endpoint.base_url).await {
+        let (managed, pid) = managed_process_info(supervisor)?;
         return Ok(DaemonActionResponse {
             status: DaemonStatus {
                 reachable: true,
-                managed: managed_process_info(supervisor)?.0,
-                pid: managed_process_info(supervisor)?.1,
+                managed,
+                pid,
                 base_url: endpoint.base_url,
+                auth_token: endpoint.token,
                 message: Some("daemon already running".to_string()),
             },
         });
@@ -155,6 +170,8 @@ async fn daemon_start_impl(supervisor: &DaemonSupervisor) -> Result<DaemonAction
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
     if let Ok(data_dir) = std::env::var("AICLI_DATA_DIR") {
         if !data_dir.trim().is_empty() {
@@ -183,6 +200,7 @@ async fn daemon_start_impl(supervisor: &DaemonSupervisor) -> Result<DaemonAction
             managed,
             pid,
             base_url: endpoint.base_url,
+            auth_token: endpoint.token,
             message: Some("daemon started".to_string()),
         },
     })
@@ -212,16 +230,10 @@ fn stop_existing_managed_child(supervisor: &DaemonSupervisor) -> Result<(), Stri
         return Ok(());
     };
 
-    if let Err(err) = managed.child.kill() {
+    if let Err(err) = terminate_child_process(&mut managed.child) {
         *guard = Some(managed);
         return Err(format!(
             "failed to stop existing managed daemon before restart: {err}"
-        ));
-    }
-    if let Err(err) = managed.child.wait() {
-        *guard = Some(managed);
-        return Err(format!(
-            "failed to wait existing managed daemon before restart: {err}"
         ));
     }
     Ok(())
@@ -236,16 +248,7 @@ async fn daemon_stop_impl(supervisor: &DaemonSupervisor) -> Result<DaemonActionR
         let _ = wait_for_not_healthy(&endpoint.base_url, STOP_TIMEOUT).await;
     }
 
-    {
-        let mut guard = supervisor
-            .managed
-            .lock()
-            .map_err(|_| "daemon state lock poisoned".to_string())?;
-        if let Some(mut managed) = guard.take() {
-            let _ = managed.child.kill();
-            let _ = managed.child.wait();
-        }
-    }
+    let _ = terminate_managed_child(supervisor);
 
     let reachable = health_ok(&endpoint.base_url).await;
     if reachable {
@@ -258,9 +261,41 @@ async fn daemon_stop_impl(supervisor: &DaemonSupervisor) -> Result<DaemonActionR
             managed: false,
             pid: None,
             base_url: endpoint.base_url,
+            auth_token: endpoint.token,
             message: Some("daemon stopped".to_string()),
         },
     })
+}
+
+fn terminate_managed_child(supervisor: &DaemonSupervisor) -> Result<(), String> {
+    let mut guard = supervisor
+        .managed
+        .lock()
+        .map_err(|_| "daemon state lock poisoned".to_string())?;
+
+    let Some(mut managed) = guard.take() else {
+        return Ok(());
+    };
+
+    terminate_child_process(&mut managed.child)
+}
+
+fn terminate_child_process(child: &mut Child) -> Result<(), String> {
+    if child
+        .try_wait()
+        .map_err(|err| format!("failed to poll managed daemon process: {err}"))?
+        .is_some()
+    {
+        return Ok(());
+    }
+
+    child
+        .kill()
+        .map_err(|err| format!("failed to kill managed daemon process: {err}"))?;
+    child
+        .wait()
+        .map_err(|err| format!("failed to wait managed daemon process: {err}"))?;
+    Ok(())
 }
 
 fn cleanup_dead_child(supervisor: &DaemonSupervisor) -> Result<(), String> {

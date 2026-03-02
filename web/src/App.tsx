@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
-import { daemonBootstrapDesktop, isDesktopRuntime } from "./lib/api";
+import { daemonBootstrapDesktop, isDesktopRuntime, syncDesktopDaemonProfile } from "./lib/api";
 
 const Dashboard = React.lazy(() => import("./pages/Dashboard"));
 const InstanceForm = React.lazy(() => import("./pages/InstanceForm"));
@@ -10,9 +10,13 @@ const Settings = React.lazy(() => import("./pages/Settings"));
 export default function App() {
   React.useEffect(() => {
     if (!isDesktopRuntime()) return;
-    void daemonBootstrapDesktop().catch(() => {
-      // Bootstrap failures are surfaced in settings/dashboard API calls.
-    });
+    void daemonBootstrapDesktop()
+      .then((response) => {
+        syncDesktopDaemonProfile(response.status);
+      })
+      .catch(() => {
+        // Bootstrap failures are surfaced in settings/dashboard API calls.
+      });
   }, []);
 
   return (

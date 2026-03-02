@@ -19,6 +19,7 @@ import {
   saveApiConfig,
   setActiveProfile,
   startPair,
+  syncDesktopDaemonProfile,
   updateSettings,
   upsertProfile,
 } from "../lib/api";
@@ -310,6 +311,10 @@ export default function Settings() {
             : kind === "stop"
               ? await daemonStopDesktop()
               : await daemonRestartDesktop();
+      if (kind !== "stop") {
+        syncDesktopDaemonProfile(response.status);
+        reloadProfiles();
+      }
       setDaemonStatus(response.status);
       flash("success", response.status.message || `Daemon ${kind} completed.`);
     } catch (e) {

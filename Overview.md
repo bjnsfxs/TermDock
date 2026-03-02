@@ -313,6 +313,30 @@
 - Verification rerun after follow-up pairing fallback fix:
   - `cargo fmt --manifest-path daemon/Cargo.toml` passed.
   - `cargo test --manifest-path daemon/Cargo.toml` passed (`16 passed, 0 failed`).
+- Fixed desktop runtime UX regressions reported after M10:
+  - `client/src-tauri/src/lib.rs`:
+    - daemon spawn now sets Windows `CREATE_NO_WINDOW`, preventing an extra console window on desktop startup,
+    - daemon status payload now includes `auth_token` for desktop-web bootstrap sync,
+    - added close-request cleanup path that terminates only managed daemon child processes before app exit,
+    - consolidated child termination logic (`terminate_child_process` / `terminate_managed_child`) and reused it in drop/stop/restart paths.
+  - `web/src/lib/api.ts`:
+    - added desktop invoker fallback (`__TAURI_INTERNALS__` or `__TAURI__.core`) for runtime detection/invoke,
+    - added `syncDesktopDaemonProfile` to persist desktop daemon `baseUrl + token` into a dedicated `desktop-local` profile and set it active,
+    - preserves existing token when desktop status does not provide one.
+  - `web/src/App.tsx`:
+    - startup desktop bootstrap now applies `syncDesktopDaemonProfile` on success to avoid manual settings sync.
+  - `web/src/pages/Settings.tsx`:
+    - daemon `bootstrap/start/restart` actions now apply desktop profile sync immediately after success.
+  - `web/src/lib/types.ts`:
+    - extended `DaemonStatus` with optional `authToken`.
+  - `web/src/lib/api.test.ts`:
+    - added tests for desktop profile creation/activation and token-preservation behavior.
+  - docs:
+    - refreshed desktop notes in `README.md` and `docs/DEPLOY_WINDOWS.md`.
+- Verification rerun after desktop UX fixes:
+  - `pnpm -C web test` passed (`22 passed, 0 failed`).
+  - `cargo check --manifest-path client/src-tauri/Cargo.toml` passed.
+  - `pnpm -C client build` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:

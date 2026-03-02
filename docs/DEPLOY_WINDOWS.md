@@ -73,7 +73,9 @@ The Tauri desktop app is now available under `client/` and reuses the same web U
 Important:
 
 - Desktop wrapper can bootstrap daemon on startup when daemon binary is available.
+- Desktop startup syncs local daemon base URL + token into a dedicated local profile for automatic API auth.
 - Settings page includes daemon lifecycle controls (bootstrap/start/stop/restart).
+- Desktop-managed daemon launch uses hidden process mode on Windows (no extra terminal window).
 - Desktop close currently stops the daemon process started/managed by the wrapper.
 - In desktop protocol context, default daemon base URL falls back to `http://127.0.0.1:8765`.
 

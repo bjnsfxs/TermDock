@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildWsUrl, resolveDefaultBaseUrl } from "./api";
+import { buildWsUrl, getActiveProfile, resolveDefaultBaseUrl, syncDesktopDaemonProfile } from "./api";
 
 afterEach(() => {
   localStorage.clear();
@@ -78,5 +78,35 @@ describe("resolveDefaultBaseUrl", () => {
         origin: "tauri://localhost",
       })
     ).toBe("http://127.0.0.1:8765");
+  });
+});
+
+describe("syncDesktopDaemonProfile", () => {
+  it("creates desktop local profile and makes it active", () => {
+    syncDesktopDaemonProfile({
+      baseUrl: "http://127.0.0.1:8765",
+      authToken: "master-token",
+    });
+
+    const active = getActiveProfile();
+    expect(active.id).toBe("desktop-local");
+    expect(active.baseUrl).toBe("http://127.0.0.1:8765");
+    expect(active.token).toBe("master-token");
+  });
+
+  it("keeps existing token when desktop status has no token", () => {
+    syncDesktopDaemonProfile({
+      baseUrl: "http://127.0.0.1:8765",
+      authToken: "existing-token",
+    });
+
+    syncDesktopDaemonProfile({
+      baseUrl: "http://127.0.0.1:8765",
+      authToken: null,
+    });
+
+    const active = getActiveProfile();
+    expect(active.id).toBe("desktop-local");
+    expect(active.token).toBe("existing-token");
   });
 });

@@ -25,6 +25,11 @@ declare global {
     __TAURI_INTERNALS__?: {
       invoke: (command: string, args?: unknown) => Promise<unknown>;
     };
+    __TAURI__?: {
+      core?: {
+        invoke: (command: string, args?: unknown) => Promise<unknown>;
+      };
+    };
   }
 }
 
@@ -33,6 +38,8 @@ const LEGACY_BASE_URL_KEY = "daemonBaseUrl";
 const LEGACY_TOKEN_KEY = "daemonToken";
 const PROFILES_KEY = "daemonProfilesV2";
 const ACTIVE_PROFILE_ID_KEY = "activeDaemonProfileIdV2";
+const DESKTOP_LOCAL_PROFILE_ID = "desktop-local";
+const DESKTOP_LOCAL_PROFILE_LABEL = "Desktop Local";
 
 export class ApiError extends Error {
   status: number;
@@ -255,7 +262,7 @@ export async function revokeAuthDevice(deviceId: string): Promise<void> {
 }
 
 export function isDesktopRuntime(): boolean {
-  return typeof window !== "undefined" && typeof window.__TAURI_INTERNALS__?.invoke === "function";
+  return typeof getDesktopInvoker() === "function";
 }
 
 export async function daemonStatusDesktop(): Promise<DaemonStatus> {
@@ -278,12 +285,45 @@ export async function daemonBootstrapDesktop(): Promise<DaemonActionResponse> {
   return invokeDesktop("daemon_bootstrap") as Promise<DaemonActionResponse>;
 }
 
+export function syncDesktopDaemonProfile(status: Pick<DaemonStatus, "baseUrl" | "authToken">): DaemonProfile | null {
+  const baseUrl = (status.baseUrl || "").trim().replace(/\/$/, "");
+  if (!baseUrl) {
+    return null;
+  }
+
+  const existingLocalProfile = listProfiles().find((profile) => profile.id === DESKTOP_LOCAL_PROFILE_ID);
+  const activeProfile = getActiveProfile();
+  const activeTokenCandidate = activeProfile.baseUrl === baseUrl ? activeProfile.token : "";
+  const token = (status.authToken || "").trim() || existingLocalProfile?.token || activeTokenCandidate || "";
+
+  return upsertProfile(
+    {
+      id: DESKTOP_LOCAL_PROFILE_ID,
+      label: existingLocalProfile?.label || DESKTOP_LOCAL_PROFILE_LABEL,
+      baseUrl,
+      token,
+      deviceId: existingLocalProfile?.deviceId ?? undefined,
+      lastSeenAt: new Date().toISOString(),
+    },
+    { setActive: true }
+  );
+}
+
 async function invokeDesktop(command: string, args?: Record<string, unknown>): Promise<unknown> {
-  const invoker = window.__TAURI_INTERNALS__?.invoke;
+  const invoker = getDesktopInvoker();
   if (!invoker) {
     throw new Error("Desktop runtime is not available.");
   }
   return invoker(command, args);
+}
+
+function getDesktopInvoker():
+  | ((command: string, args?: Record<string, unknown>) => Promise<unknown>)
+  | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.__TAURI_INTERNALS__?.invoke || window.__TAURI__?.core?.invoke || null;
 }
 
 async function apiFetch(path: string, init?: RequestInit) {
