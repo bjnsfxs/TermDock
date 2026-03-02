@@ -337,6 +337,11 @@
   - `pnpm -C web test` passed (`22 passed, 0 failed`).
   - `cargo check --manifest-path client/src-tauri/Cargo.toml` passed.
   - `pnpm -C client build` passed and produced `client/src-tauri/target/release/ai-cli-manager-client.exe`.
+- Repository hygiene follow-up:
+  - updated `.gitignore` to ignore local temporary/debug artifacts:
+    - `.tmp/`
+    - `__tmp_*`
+  - purpose: prevent accidental commit/upload of scratch binaries, PDBs, and one-off test scripts.
 
 ## Current Runtime Architecture (Daemon)
 - Process state keyed by `instance_id`, each entry contains:

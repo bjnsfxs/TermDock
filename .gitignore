@@ -16,3 +16,7 @@ artifacts/
 
 # Tauri generated schemas
 client/src-tauri/gen/
+
+# Local temporary/debug artifacts
+.tmp/
+__tmp_*
